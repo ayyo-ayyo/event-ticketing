@@ -1,4 +1,4 @@
-# Sprint 1 Plan — [Team Name]
+# Sprint 1 Plan — Group 9
 
 **Sprint:** 1 — Foundation  
 **Dates:** 04.07 → 04.14  
@@ -8,7 +8,10 @@
 
 ## Goal
 
-[One or two sentences on what your team will have working by end of sprint. Be specific. "Order service, restaurant service, and synchronous call between them running in Docker Compose with health endpoints" is good. "Get stuff working" is not.]
+We need to start our 3 core services, which are the event catalog service, ticket purchase service, and payment service. Those core services will each expose a GET /health endpoint as well as have a health-check directive in our docker-compose.yml. 
+Each of those core services should connect to its own database, which is the event catalog database, and the purchase database. 
+We will have our ticket purchase endpoint. A ticket service would then cause a ticket purchase service to initiate payment with 
+the payment service. Finally, we will explain how to start the system and our endpoints in the README.md.
 
 ---
 

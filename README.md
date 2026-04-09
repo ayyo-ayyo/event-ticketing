@@ -1,9 +1,9 @@
-# [Team Name] — [System Name]
+# Group 9 — Event Ticketing
 
 **Course:** COMPSCI 426  
-**Team:** [Name], [Name], [Name], ...  
-**System:** [e.g. Event Ticketing / Food Delivery / Video Platform / ...]  
-**Repository:** [GitHub URL — public fork of https://github.com/umass-cs-426/starter-project]
+**Team:** Derek Barbosa, Sean Rodgers, Jimmy Jiang, Brian Nguyen, Maycol Meza, Mateus Andrade, Ayomide Olubanwo, Lucky Kovvuri 
+**System:** Event Ticketing
+**Repository:** GitHub URL — public fork of https://github.com/ayyo-ayyo/event-ticketing.git
 
 ---
 
