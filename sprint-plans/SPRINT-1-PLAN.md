@@ -33,27 +33,39 @@ git log --author="Name" --oneline -- path/to/directory/
 
 ## Tasks
 
-- [ ] Create a docker-compose.yml which starts all core services and their databases
+## [Derek]
+- [ ] Create a `docker-compose.yml` which starts all core services and their databases
     - [ ] Each service has a healthcheck directive 
+    - [ ] don't need to have a separate payment database, Payment service will use Ticket Purchase DB
+
+## [Mateus]
 - [ ] Start Event Catalog Service 
     - [ ] connect to Event Catalog DB
     - [ ] have a Redis container running and allow this service to connect to it
     - [ ] expose one working endpoint (can be placeholder data)
-    - [ ] expose a GET /health endpoint 
+    - [ ] expose a `GET /health endpoint` 
+## [Michael]    
 - [ ] Start Ticket Purchase Service - connect to Ticket Purchase DB
     - [ ] connect to Ticket Purchase DB
     - [ ] expose one working endpoint (can be placeholder data)
-    - [ ] expose a GET /health endpoint 
-- [ ] Start Payment Service
-    - [ ] connect to Ticket Purchase DB
-    - [ ] expose one working endpoint (can be placeholder data)
-    - [ ] expose a GET /health endpoint 
+    - [ ] expose a `GET /health endpoint`
 
+## [Brian]     
+- [ ] Start Payment Service
+    - [ ] connect to Ticket Purchase DB (the DB should have payment information)
+    - [ ] expose one working endpoint (can be placeholder data)
+    - [ ] expose a `GET /health endpoint`
+
+## [Jimmy]
 - [ ] Ticket Purchase Service to Payment Service synchronous service-to-service HTTP call (to initiate payment after a purchase)
+
+## [Sean]
 - [ ] Ticket Purchase Service to Event Catalog synchronous service-to-service HTTP call (to reference event listings for purchase)
 
-- [ ] Explain docker compose and available endpoints in README.md
+## [Ayo]
+- [ ] Explain docker compose and available endpoints in `README.md`
 
+## [Lucky]
 - [ ] Write a k6 test script that sends traffic to event catalog endpoint as a baseline measurement
     - [ ] Include output in sprint report
 
