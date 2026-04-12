@@ -41,9 +41,7 @@ docker compose exec holmes bash
 ### Base URLs (development)
 
 ```
-[your-service-name]    http://localhost:[port]
-[your-service-name]    http://localhost:[port]
-[worker-name]          http://localhost:[port]   (health endpoint only)
+event-catalog-service  http://localhost:3003
 holmes                 (no port — access via exec)
 ```
 
@@ -72,6 +70,8 @@ Include which service calls which, what queues exist, and how data flows.]
 
 ### [Service Name]
 
+### Event Catalog Service
+
 ### GET /health
 
 ```
@@ -87,7 +87,7 @@ GET /health
 **Example request:**
 
 ```bash
-curl http://localhost:[port]/health
+curl http://localhost:3003/health
 ```
 
 **Example response (200):**
@@ -107,6 +107,39 @@ curl http://localhost:[port]/health
   "status": "unhealthy",
   "db": "ok",
   "redis": "error: connection refused"
+}
+```
+
+### GET /events/:id
+
+```
+GET /events/:id
+
+  Returns one event by id.
+  Uses Redis cache for hot reads and falls back to placeholder data.
+
+  Responses:
+    200  Event payload returned
+```
+
+**Example request:**
+
+```bash
+curl http://localhost:3003/events/1
+```
+
+**Example response (200):**
+
+```json
+{
+  "source": "placeholder",
+  "event": {
+    "id": "1",
+    "title": "Placeholder Concert",
+    "venue": "Downtown Arena",
+    "date": "2026-10-31T20:00:00Z",
+    "seatsAvailable": 240
+  }
 }
 ```
 
