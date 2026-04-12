@@ -27,7 +27,8 @@ async function ensureSchema() {
       id SERIAL PRIMARY KEY,
       venue_id INTEGER NOT NULL REFERENCES venues(id),
       title TEXT NOT NULL,
-      event_date TIMESTAMPTZ NOT NULL
+      event_date TIMESTAMPTZ NOT NULL,
+      base_price_cents INTEGER NOT NULL DEFAULT 0 CHECK (base_price_cents >= 0)
     );
   `);
 
@@ -37,8 +38,20 @@ async function ensureSchema() {
       event_id INTEGER NOT NULL REFERENCES events(id),
       section_name TEXT NOT NULL,
       total_seats INTEGER NOT NULL CHECK (total_seats >= 0),
-      available_seats INTEGER NOT NULL CHECK (available_seats >= 0)
+      available_seats INTEGER NOT NULL CHECK (available_seats >= 0),
+      price_cents INTEGER NOT NULL DEFAULT 0 CHECK (price_cents >= 0)
     );
+  `);
+
+  // Ensure pricing columns exist for already-provisioned databases.
+  await pool.query(`
+    ALTER TABLE events
+    ADD COLUMN IF NOT EXISTS base_price_cents INTEGER NOT NULL DEFAULT 0 CHECK (base_price_cents >= 0);
+  `);
+
+  await pool.query(`
+    ALTER TABLE seat_inventory
+    ADD COLUMN IF NOT EXISTS price_cents INTEGER NOT NULL DEFAULT 0 CHECK (price_cents >= 0);
   `);
 }
 
@@ -81,6 +94,8 @@ app.get('/events/:id', async (req, res) => {
       title: 'Placeholder Concert',
       venue: 'Downtown Arena',
       date: '2026-10-31T20:00:00Z',
+      currency: 'USD',
+      basePriceCents: 6500,
       seatsAvailable: 240
     };
 
