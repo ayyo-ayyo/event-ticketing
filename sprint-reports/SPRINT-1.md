@@ -19,6 +19,7 @@
 | [Name]      | [e.g. order-service with DB schema, health endpoint]    | [short SHA or PR link] |
 | [Name]      | [e.g. restaurant-service, synchronous call integration] |                        |
 | [Name]      | [e.g. compose.yml wiring, k6 baseline script]           |                        |
+| Mateus      | Event Catalog service foundation: Postgres schema bootstrap (`venues`, `events`, `seat_inventory`), Redis integration, `GET /health`, and working `GET /events/:id` endpoint with cache-first behavior |                        |
 
 Verify with:
 
