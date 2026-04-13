@@ -110,7 +110,7 @@ services:
       PORT: 3002
       DATABASE_URL: postgres://postgres:postgres@purchase-db:5432/purchase_db
       REDIS_URL: redis://redis:6379
-      PAYMENT_SERVICE_URL: http://payment-service:3003
+      PAYMENT_SERVICE_URL: http://payment-service:3001
     depends_on:
       purchase-db:
         condition: service_healthy
@@ -223,18 +223,6 @@ services:
       - team-net
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U catalog -d event_catalog"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-
-  redis:
-    image: redis:7
-    container_name: redis
-    restart: unless-stopped
-    networks:
-      - team-net
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 10
