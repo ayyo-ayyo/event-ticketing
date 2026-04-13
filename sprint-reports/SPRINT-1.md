@@ -21,6 +21,7 @@
 | [Name]      | [e.g. compose.yml wiring, k6 baseline script]           |                        |
 | Maycol M      | Finish setting the ticket purshcase service and made db for it           |     5dcf088a81be18773fa7281984e8c26e1cabd49e, and 1beb13e7a1f92d34073a39de9840465d604623ef                   |
 
+| Mateus      | Event Catalog service foundation: Postgres schema bootstrap (`venues`, `events`, `seat_inventory`), Redis integration, `GET /health`, and working `GET /events/:id` endpoint with cache-first behavior |                        |
 
 Verify with:
 
