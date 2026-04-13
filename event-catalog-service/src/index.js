@@ -55,6 +55,11 @@ async function ensureSchema() {
   `);
 }
 
+// Receiving service to service HTTP call from ticket purchasing service
+app.get("/info", (_req, res) => {
+  res.json({message: "Message from Event Catalog Service"});
+})
+
 app.get('/health', async (_req, res) => {
   let dbStatus = 'ok';
   let redisStatus = 'ok';
