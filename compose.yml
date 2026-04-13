@@ -77,6 +77,49 @@ services:
   #     retries: 3
   #     start_period: 15s
   #
+
+  ticket-purchase-service:
+    build: ./ticket-purchase-service
+    container_name: ticket-purchase-service
+    restart: unless-stopped
+    ports:
+      - "3002:3002"
+    networks:
+      - team-net
+    environment:
+      PORT: 3002
+      DATABASE_URL: postgres://postgres:postgres@purchase-db:5432/purchase_db
+      REDIS_URL: redis://redis:6379
+      PAYMENT_SERVICE_URL: http://payment-service:3003
+    depends_on:
+      purchase-db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3002/health"]
+      interval: 10s
+      timeout: 5s
+      start_period: 15s
+
+  purchase-db:
+    image: postgres:16
+    container_name: purchase-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: purchase_db
+    volumes:
+      - purchase-db-data:/var/lib/postgresql/data
+      - ./ticket-purchase-service/sql/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - team-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d purchase_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
   # ── Postgres template ──────────────────────────────────────────────────────
   #
   # postgres:
@@ -110,6 +153,17 @@ services:
   #     interval: 5s
   #     timeout: 3s
   #     retries: 5
+  redis:
+    image: redis:7
+    container_name: redis
+    restart: unless-stopped
+    networks:
+      - team-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   event-catalog-service:
     build: ./event-catalog-service
@@ -171,4 +225,5 @@ services:
 # volumes:
 #   postgres-data:
 volumes:
+  purchase-db-data:
   event-catalog-db-data:
