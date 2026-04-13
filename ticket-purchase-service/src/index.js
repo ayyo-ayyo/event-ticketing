@@ -29,6 +29,21 @@ async function connectRedis() {
   }
 }
 
+// HTTP to connect to Event Catalog Service
+async function connectEventCatalogService(){
+  try{
+    const response = await fetch("http://event-catalog-service:3003/info")
+
+    if(!response.ok){
+      throw new Error(`HTTP error. Status: ${response.status}`);
+    }
+    const data = await response.json();
+    console.log(data);
+  } catch (error) {
+    console.error('Error calling Event Catalog Service:', error.message)
+  }
+}
+
 app.get("/", (req, res) => {
   res.json({
     service: "ticket-purchase-service",
@@ -136,6 +151,8 @@ async function startServer() {
     console.error("Startup failed:", err.message);
     process.exit(1);
   }
+
+  await connectEventCatalogService();
 }
 
 startServer();

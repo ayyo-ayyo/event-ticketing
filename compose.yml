@@ -207,17 +207,19 @@ services:
       timeout: 3s
       retries: 10
 
-  redis:
-    image: redis:7
-    container_name: redis
-    restart: unless-stopped
-    networks:
-      - team-net
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
+  # redis: Redis was already defined so I commented this out because 
+  # the duplicate definitions was causing an error - Sean
+  #
+  #   image: redis:7
+  #   container_name: redis
+  #   restart: unless-stopped
+  #   networks:
+  #     - team-net
+  #   healthcheck:
+  #     test: ["CMD", "redis-cli", "ping"]
+  #     interval: 5s
+  #     timeout: 3s
+  #     retries: 10
 
 # ── Named volumes ──────────────────────────────────────────────────────────────
 # Declare a volume for each database here, e.g.:
