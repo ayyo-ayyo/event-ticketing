@@ -78,6 +78,26 @@ services:
   #     start_period: 15s
   #
 
+  payment-service:
+    build: ./payment-service
+    container_name: payment-service
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    networks:
+      - team-net
+    environment:
+      PORT: 3001
+      DATABASE_URL: postgres://postgres:postgres@purchase-db:5432/purchase_db
+    depends_on:
+      purchase-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3001/health"]
+      interval: 10s
+      timeout: 5s
+      start_period: 15s
+
   ticket-purchase-service:
     build: ./ticket-purchase-service
     container_name: ticket-purchase-service
@@ -90,7 +110,7 @@ services:
       PORT: 3002
       DATABASE_URL: postgres://postgres:postgres@purchase-db:5432/purchase_db
       REDIS_URL: redis://redis:6379
-      PAYMENT_SERVICE_URL: http://payment-service:3003
+      PAYMENT_SERVICE_URL: http://payment-service:3001
     depends_on:
       purchase-db:
         condition: service_healthy
