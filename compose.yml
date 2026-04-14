@@ -50,6 +50,22 @@ services:
       - TERM=xterm-256color
     # Holmes has no ports — access it via: docker compose exec holmes bash
 
+<<<<<<< Derek-coreServices
+  event-catalog:
+    build: ./event-catalog
+    container_name: event-catalog
+    restart: unless-stopped
+    ports:
+      - "3001:3001"   #Expose on host for local testing
+    networks:
+      - team-net #MUST HAVE for redis
+    environment:
+      - DATABASE_URL=postgres://user:pass@events-db:5432/eventsdb
+      - REDIS_URL=redis://redis:6379
+      - PORT=3001
+    depends_on:
+      events-db:
+=======
   # ── Add your services here ─────────────────────────────────────────────────
   #
   # Pattern for each service:
@@ -113,10 +129,118 @@ services:
       PAYMENT_SERVICE_URL: http://payment-service:3001
     depends_on:
       purchase-db:
+>>>>>>> dev
         condition: service_healthy
       redis:
         condition: service_healthy
     healthcheck:
+<<<<<<< Derek-coreServices
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  ticket-purchase:
+    build: ./ticket-purchase
+    container_name: ticket-purchase
+    restart: unless-stopped
+    ports:
+      - "3002:3002"
+    networks:
+      - team-net
+    environment:
+      - DATABASE_URL=postgres://user:pass@tickets-db:5432/ticketsdb
+      - EVENT_CATALOG_URL=http://event-catalog:3001
+      - PAYMENT_SERVICE_URL=http://payment-service:3003
+      - PORT=3002
+    depends_on:
+      tickets-db:
+        condition: service_healthy
+      event-catalog:
+        condition: service_healthy
+      payment-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3002/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  payment-service:
+    build: ./payment-service
+    container_name: payment-service
+    restart: unless-stopped
+    ports:
+      - "3003:3003"
+    networks:
+      - team-net
+    environment:
+      - DATABASE_URL=postgres://user:pass@tickets-db:5432/ticketsdb
+      - PORT=3003
+    depends_on:
+      tickets-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3003/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  events-db:
+    image: postgres:16
+    container_name: events-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: pass
+      POSTGRES_DB: eventsdb
+    volumes:
+      - events-db-data:/var/lib/postgresql/data
+    networks:
+      - team-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d eventsdb"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  tickets-db:
+    image: postgres:16
+    container_name: tickets-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: pass
+      POSTGRES_DB: ticketsdb
+    volumes:
+      - tickets-db-data:/var/lib/postgresql/data
+    networks:
+      - team-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d ticketsdb"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis:
+    image: redis:7
+    container_name: redis
+    restart: unless-stopped
+    networks:
+      - team-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  events-db-data:
+  tickets-db-data:
+=======
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:3002/health"]
       interval: 10s
       timeout: 5s
@@ -236,3 +360,4 @@ services:
 volumes:
   purchase-db-data:
   event-catalog-db-data:
+>>>>>>> dev
