@@ -124,11 +124,40 @@ app.post("/purchases", async (req, res) => {
       ]
     );
 
-    return res.status(201).json({
-      message: "Purchase created",
-      paymentServiceUrl: PAYMENT_SERVICE_URL,
-      purchase: result.rows[0],
-    });
+    const purchase = result.rows[0];
+
+    // Synchronous HTTP call to Payment Service
+    let paymentResult;
+    try {
+      const paymentResponse = await fetch(`${PAYMENT_SERVICE_URL}/payments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ purchaseId: purchase.id }),
+      });
+
+      paymentResult = await paymentResponse.json();
+
+      if (paymentResponse.ok) {
+        return res.status(201).json({
+          message: "Purchase created and payment processed",
+          purchase,
+          payment: paymentResult,
+        });
+      } else {
+        // Payment declined — purchase record is already marked failed by payment service
+        return res.status(402).json({
+          message: "Purchase created but payment failed",
+          purchase,
+          payment: paymentResult,
+        });
+      }
+    } catch (paymentErr) {
+      console.error("Failed to reach Payment Service:", paymentErr.message);
+      return res.status(502).json({
+        error: "Payment Service unreachable",
+        purchase,
+      });
+    }
   } catch (err) {
     console.error("Failed to create purchase:", err.message);
     return res.status(500).json({
