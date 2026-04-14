@@ -69,32 +69,14 @@ git log --author="Name" --oneline -- path/to/directory/
 - [ ] Write a k6 test script that sends traffic to event catalog endpoint as a baseline measurement
     - [ ] Include output in sprint report
 
-
-### [Name]
-
-- [ ] Set up `[service]/` with Express + Postgres connection
-- [ ] Implement `GET /health` with DB check
-- [ ] Write `db/schema.sql` and seed script
-- [ ] Add `healthcheck` directive to `compose.yml`
-
-### [Name]
-
-- [ ] Set up `[service]/` with Express + Redis connection
-- [ ] Implement `GET /health` with Redis check
-- [ ] Implement `GET /[resource]` — stub returning placeholder data
-- [ ] Test synchronous call to [other service]
-
-### [Name]
-
-- [ ] Wire `depends_on: condition: service_healthy` in `compose.yml`
-- [ ] Write `k6/sprint-1.js` baseline load test
-- [ ] Write `README.md` startup instructions and endpoint list
-
 ---
 
 ## Risks
 
 [What could go wrong? What are you uncertain about? What will you do if a task takes longer than expected?]
+
+There are some risks in the first sprint for our event ticketing platform. Although most of the tasks themselves are relatively straightforward, there are some time constraints, especially because we didn't really start the project until the Thursday class.
+The main issue is that some of the tasks, like the HTTP calls, require other tasks to be finished beforehand. So, if these tasks, like the main services, aren't finished the downstream tasks can't be completed. However, if any of the group members are having trouble with their task, the rest of the group will be ready to help them out.
 
 ---
 
