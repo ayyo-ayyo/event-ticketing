@@ -34,17 +34,17 @@ git log --author="Name" --oneline -- path/to/directory/
 
 ## What Is Working
 
-- [ ] `docker compose up` starts all services without errors
-- [ ] `docker compose ps` shows every service as `(healthy)`
-- [ ] `GET /health` on every service returns `200` with DB and Redis status
-- [ ] At least one synchronous service-to-service call works end-to-end
-- [ ] k6 baseline test runs successfully
+- [X] `docker compose up` starts all services without errors
+- [X] `docker compose ps` shows every service as `(healthy)`
+- [X] `GET /health` on every service returns `200` with DB and Redis status
+- [X] At least one synchronous service-to-service call works end-to-end
+- [X] k6 baseline test runs successfully
 
 ---
 
 ## What Is Not Working / Cut
 
-[Be honest. What did you not finish? What did you cut from the sprint plan and why? How will you address it in Sprint 2?]
+We did everything that we wanted to do in this sprint
 
 ---
 
@@ -113,4 +113,4 @@ These numbers are your baseline. Sprint 2 caching should improve them measurably
 
 ## Blockers and Lessons Learned
 
-[What slowed you down? What would you do differently? What surprised you?]
+Definitely should try to split tasks so everyone can code, and document their own stuff, even if everyone can't work on a core service. We also want to try to make sure we know which tasks depend on other beforehand
