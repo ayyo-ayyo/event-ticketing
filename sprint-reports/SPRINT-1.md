@@ -16,7 +16,7 @@
 
 | Team Member | What They Delivered                                     | Key Commits            |
 | ----------- | ------------------------------------------------------- | ---------------------- |
-| Lucky K      | Customized k6 load test script and added synthesized baseline results into Sprint 1 Report    | [short SHA or PR link] |
+| Lucky K      | Customized k6 load test script and added synthesized baseline results into Sprint 1 Report    | 21e0942 |
 | [Name]      | [e.g. restaurant-service, synchronous call integration] |                        |
 | Sean R      | Completed service to service HTTP call from Ticket Purchasing service to Event Catalog Service | 27169c833d36aae729a48b9df60346d68834113f |
 | Maycol M      | Finish setting the ticket purshcase service and made db for it           |     5dcf088a81be18773fa7281984e8c26e1cabd49e, and 1beb13e7a1f92d34073a39de9840465d604623ef                   |
