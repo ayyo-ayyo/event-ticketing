@@ -128,34 +128,55 @@ app.post("/purchases", async (req, res) => {
 
     // Synchronous HTTP call to Payment Service
     let paymentResult;
+    let paymentResponse;
     try {
-      const paymentResponse = await fetch(`${PAYMENT_SERVICE_URL}/payments`, {
+      paymentResponse = await fetch(`${PAYMENT_SERVICE_URL}/payments`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ purchaseId: purchase.id }),
       });
 
       paymentResult = await paymentResponse.json();
-
-      if (paymentResponse.ok) {
-        return res.status(201).json({
-          message: "Purchase created and payment processed",
-          purchase,
-          payment: paymentResult,
-        });
-      } else {
-        // Payment declined — purchase record is already marked failed by payment service
-        return res.status(402).json({
-          message: "Purchase created but payment failed",
-          purchase,
-          payment: paymentResult,
-        });
-      }
     } catch (paymentErr) {
       console.error("Failed to reach Payment Service:", paymentErr.message);
       return res.status(502).json({
         error: "Payment Service unreachable",
         purchase,
+      });
+    }
+
+    const paymentStatus = paymentResponse.ok ? "paid" : "failed";
+    const reservationStatus = paymentResponse.ok ? "confirmed" : "released";
+    let updatedPurchase;
+
+    try {
+      updatedPurchase = await pool.query(
+        `UPDATE purchases
+         SET payment_status = $1, reservation_status = $2
+         WHERE id = $3
+         RETURNING *`,
+        [paymentStatus, reservationStatus, purchase.id]
+      );
+    } catch (statusErr) {
+      console.error("Failed to update payment status:", statusErr.message);
+      return res.status(500).json({
+        error: "Payment processed but failed to update purchase status",
+        purchase,
+        payment: paymentResult,
+      });
+    }
+
+    if (paymentResponse.ok) {
+      return res.status(201).json({
+        message: "Purchase created and payment processed",
+        purchase: updatedPurchase.rows[0],
+        payment: paymentResult,
+      });
+    } else {
+      return res.status(402).json({
+        message: "Purchase created but payment failed",
+        purchase: updatedPurchase.rows[0],
+        payment: paymentResult,
       });
     }
   } catch (err) {
