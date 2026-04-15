@@ -94,6 +94,8 @@ services:
         condition: service_healthy
       event-catalog-service:
         condition: service_healthy
+      payment-service:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:3002/health"]
       interval: 10s
@@ -109,13 +111,9 @@ services:
     networks:
       - team-net
     environment:
-      - DATABASE_URL=postgres://postgres:postgres@purchase-db:5432/purchase_db
       - PORT=3003
-    depends_on:
-      purchase-db:
-        condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3003/health"]
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3003/health"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -172,5 +170,4 @@ services:
 volumes:
   purchase-db-data:
   events-db-data:
-  tickets-db-data:
   event-catalog-db-data:
