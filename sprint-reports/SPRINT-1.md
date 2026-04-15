@@ -8,7 +8,7 @@
 
 ## What We Built
 
-[One or two paragraphs. What is running? What does `docker compose up` produce? What endpoints are live?]
+We've laid the foundation of the three core services of the event ticketing app, the ticket purchase service, the event catalog service and the payment service. Each core service has a `GET /health` endpoint and another endpoint unique to it, `POST /purchases` (to create new purchases) for the ticket purchase service, `GET /events/:id` for the event catalog service, and `POST /payments` (to process purchases) for the payment service. There is also a test route `GET /info` on the event catalog services that the ticket purchase service calls to test cross-service connection, there's also a call from the ticket purchase service to the payment service for the route `POST /payments` for a similar purpose.
 
 ---
 
