@@ -22,7 +22,7 @@ app.post("/payments", async (req, res) => {
     });
   }
 
-  // Simulate payment processing. The purchase service owns purchase persistence.
+  
   const success = Math.random() > 0.1;
 
   if (success) {
