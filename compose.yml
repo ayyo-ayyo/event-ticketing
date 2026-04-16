@@ -118,6 +118,29 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
+
+
+  refund-service:
+    build: ./refund-service
+    container_name: refund-service
+    restart: unless-stopped
+    ports:
+      - "3004:3001"
+    networks:
+      - team-net
+    environment:
+      - PORT=3001
+      - DATABASE_URL=postgres://postgres:password@refund-service-db:5432/refund-service
+    depends_on:
+      refund-service-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
   purchase-db:
     image: postgres:16
     container_name: purchase-db
@@ -154,6 +177,24 @@ services:
       timeout: 3s
       retries: 10
 
+  refund-service-db:
+    image: postgres:16
+    container_name: refund-service-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: refund-service
+    volumes:
+      - refund-service-db-data:/var/lib/postgresql/data
+    networks:
+      - team-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d refund-service"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
 
   redis:
     image: redis:7
@@ -169,5 +210,5 @@ services:
 
 volumes:
   purchase-db-data:
-  events-db-data:
   event-catalog-db-data:
+  refund-service-db-data:
