@@ -32,7 +32,7 @@ async function connectRedis() {
 // HTTP to connect to Event Catalog Service
 async function connectEventCatalogService(){
   try{
-    const response = await fetch("http://event-catalog-service:3003/info")
+    const response = await fetch("http://event-catalog-service:3001/info")
 
     if(!response.ok){
       throw new Error(`HTTP error. Status: ${response.status}`);
