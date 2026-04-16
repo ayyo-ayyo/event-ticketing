@@ -2,7 +2,7 @@ const express = require('express');
 const { Pool } = require('pg');
 const { createClient } = require('redis');
 
-const PORT = Number(process.env.PORT || 3003);
+const PORT = Number(process.env.PORT || 3001);
 const DATABASE_URL = process.env.DATABASE_URL || 'postgres://catalog:catalog@event-catalog-db:5432/event_catalog';
 const REDIS_URL = process.env.REDIS_URL || 'redis://redis:6379';
 
@@ -63,6 +63,8 @@ app.get("/info", (_req, res) => {
 app.get('/health', async (_req, res) => {
   let dbStatus = 'ok';
   let redisStatus = 'ok';
+  service: "event-catalog-service";
+  message: "running";
 
   try {
     await pool.query('SELECT 1');
