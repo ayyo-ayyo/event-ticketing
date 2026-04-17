@@ -31,8 +31,12 @@ async function connectRedis() {
 
 // HTTP to connect to Event Catalog Service
 async function connectEventCatalogService(){
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000); // Timeout 5s
+
   try{
-    const response = await fetch("http://event-catalog-service:3001/info")
+    const response = await fetch("http://event-catalog-service:3001/info", {signal: controller.signal});
+    clearTimeout(timeout);
 
     if(!response.ok){
       throw new Error(`HTTP error. Status: ${response.status}`);
@@ -40,7 +44,35 @@ async function connectEventCatalogService(){
     const data = await response.json();
     console.log(data);
   } catch (error) {
-    console.error('Error calling Event Catalog Service:', error.message)
+    if(error.name == "AbortError"){
+      console.error('Error: Timeout on HTTP request to Event Catalog Service');
+    } else {
+      console.error('Error calling Event Catalog Service:', error.message)
+    }
+  }
+}
+
+// Use this function for fetching events corresponding to the ticket
+async function fetchEvent(eventId){ 
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000); // Timeout 5s;
+  try{
+    const response = await fetch(`http://event-catalog-service:3001/events/${eventId}`, {signal: controller.signal});
+    clearTimeout(timeout);
+
+    if(!response.ok){
+    throw new Error(`HTTP error. Status: ${response.status}`)
+    }
+  const event = await response.json();
+  return event;
+
+  } catch (error) {
+    if(error.name == "AbortError"){
+      console.error('')
+      console.error('Error: Timeout on HTTP request for fetching event based on eventId');
+    } else {
+      console.error('Error fetching event from Event Catalog Service:', error.message)
+    }
   }
 }
 
