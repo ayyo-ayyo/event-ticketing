@@ -9,6 +9,7 @@ const PORT = process.env.PORT || 3002;
 const DATABASE_URL = process.env.DATABASE_URL;
 const REDIS_URL = process.env.REDIS_URL;
 const PAYMENT_SERVICE_URL = process.env.PAYMENT_SERVICE_URL;
+const POSTGRES_UNIQUE_VIOLATION = "23505";
 
 const pool = new Pool({
   connectionString: DATABASE_URL,
@@ -80,49 +81,62 @@ app.get("/health", async (req, res) => {
 });
 
 app.post("/purchases", async (req, res) => {
+  const idempotencyKey = req.header("Idempotency-Key")?.trim();
   const {
     userId,
     eventId,
     quantity,
     unitTicketCents,
-    idempotencyKey,
   } = req.body;
 
-  if (!userId || !eventId || !quantity || !unitTicketCents || !idempotencyKey) {
+  if (!idempotencyKey) {
     return res.status(400).json({
-      error:
-        "userId, eventId, quantity, unitTicketCents, and idempotencyKey are required",
+      error: "Idempotency-Key header is required",
+    });
+  }
+
+  if (!userId || !eventId || !quantity || !unitTicketCents) {
+    return res.status(400).json({
+      error: "userId, eventId, quantity, and unitTicketCents are required",
     });
   }
 
   try {
-    const existing = await pool.query(
-      "SELECT * FROM purchases WHERE idempotency_key = $1",
-      [idempotencyKey]
-    );
+    let result;
 
-    if (existing.rows.length > 0) {
-      return res.status(200).json({
-        message: "Duplicate request detected, returning existing purchase",
-        purchase: existing.rows[0],
-      });
+    try {
+      result = await pool.query(
+        `INSERT INTO purchases
+         (user_id, event_id, quantity, unit_ticket_cents, reservation_status, payment_status, idempotency_key)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         RETURNING *`,
+        [
+          userId,
+          eventId,
+          quantity,
+          unitTicketCents,
+          "reserved",
+          "pending",
+          idempotencyKey,
+        ]
+      );
+    } catch (insertErr) {
+      if (insertErr.code === POSTGRES_UNIQUE_VIOLATION) {
+        const existing = await pool.query(
+          "SELECT * FROM purchases WHERE idempotency_key = $1",
+          [idempotencyKey]
+        );
+
+        if (existing.rows.length > 0) {
+          return res.status(200).json({
+            message: "Duplicate request detected, returning existing purchase",
+            purchase: existing.rows[0],
+          });
+        }
+      }
+
+      throw insertErr;
     }
-
-    const result = await pool.query(
-      `INSERT INTO purchases
-       (user_id, event_id, quantity, unit_ticket_cents, reservation_status, payment_status, idempotency_key)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       RETURNING *`,
-      [
-        userId,
-        eventId,
-        quantity,
-        unitTicketCents,
-        "reserved",
-        "pending",
-        idempotencyKey,
-      ]
-    );
 
     const purchase = result.rows[0];
 

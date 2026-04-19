@@ -6,6 +6,6 @@ CREATE TABLE IF NOT EXISTS purchases (
   unit_ticket_cents INT NOT NULL,
   reservation_status VARCHAR(50) NOT NULL DEFAULT 'pending',
   payment_status VARCHAR(50) NOT NULL DEFAULT 'pending',
-  idempotency_key VARCHAR(255) UNIQUE,
+  idempotency_key VARCHAR(255) NOT NULL UNIQUE,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
