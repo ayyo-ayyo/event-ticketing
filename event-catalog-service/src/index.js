@@ -19,8 +19,11 @@ const getEventByIdSql = fs.readFileSync(
 );
 
 // Receiving service to service HTTP call from ticket purchasing service
-app.get("/info", (_req, res) => {
-  res.json({message: "Message from Event Catalog Service"});
+app.get("/info", async (_req, res) => {
+  //await new Promise(resolve => setTimeout(resolve, 7000)); // 7 seconds (For Testing AbortError)
+  res.json({service: "event-catalog-service",
+      status: "running",
+  });
 })
 
 app.get('/health', async (_req, res) => {
