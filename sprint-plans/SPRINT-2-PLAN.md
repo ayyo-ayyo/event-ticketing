@@ -9,7 +9,21 @@
 ## Goal
 
 [What will your team have working by end of sprint? Name the specific cache, queue, and worker you are adding.]
+- Cache event details for event catalog
+- Make Ticket Purchase idempotent
+- Make Payment idempotent 
+Get some of our workers and services running:
+- Notification Service/Worker - also expose a GET /health endpoint that includes the current queue depth, the dead letter queue depth, and the timestamp of the last successfully processed job.
+- Waitlist Worker - exposes GET /health endpoint that includes the current queue depth, the dead letter queue depth, and the timestamp of the last successfully processed job.
+- Refund Service
 
+- Async pipeline - a service pushes a message onto a Redis queue or pub/sub channel, and a worker consumes it and does something useful: Ticket Purchase Service pushes message onto Redis queue about waitlist entries, Waitlist Worker consumes it and When a ticket is released (cancellation or payment failure), the worker promotes the next waitlisted user and publishes a purchase event. Must handle poison pills — a malformed waitlist entry should be moved to a dead letter queue, not retried forever.
+
+- and workers log their activities
+
+- k6 load test cache
+- k6 load test async
+- README 
 ---
 
 ## Ownership
@@ -24,17 +38,45 @@
 
 ## Tasks
 
-### [Name]
+### Mateus
 
-- [ ] ...
+- [ ] Cache event details for event catalog
 
-### [Name]
+### Maycol
 
-- [ ] ...
+- [ ] Make Ticket Purchase idempotent
 
-### [Name]
+### Lucky
 
-- [ ] ...
+- [ ] Make Payment idempotent
+
+### Jimmy
+
+- [ ] Get Notification Service/Worker running
+    - [ ] also expose a GET /health endpoint that includes the current queue depth, the dead letter queue depth, and the timestamp of the last successfully processed job.
+    - [ ] Workers log what they are doing so a TA can see the pipeline in action in the Docker Compose logs
+
+### Brian
+
+- [ ] Waitlist Worker 
+    - [ ] exposes GET /health endpoint that includes the current queue depth, the dead letter queue depth, and the timestamp of the last successfully processed job.
+    - [ ] Workers log what they are doing so a TA can see the pipeline in action in the Docker Compose logs
+
+### Derek
+
+- [ ] Refund Service 
+
+### Ayo
+
+- [ ] Async pipeline: Ticket Purchase Service pushes message onto Redis queue about waitlist entries, Waitlist Worker consumes it
+    - [ ] When a ticket is released (cancellation or payment failure), the worker promotes the next waitlisted user and publishes a purchase event. Must handle poison pills — a malformed waitlist entry should be moved to a dead letter queue, not retried forever.
+
+### Shaun
+
+- [ ] k6 load test async
+- [ ] k6 load test cache    
+
+
 
 ---
 
