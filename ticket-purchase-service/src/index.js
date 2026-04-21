@@ -1,3 +1,4 @@
+const e = require("express");
 const express = require("express");
 const { Pool } = require("pg");
 const { createClient } = require("redis");
@@ -74,6 +75,32 @@ async function fetchEvent(eventId){
       console.error('Error fetching event from Event Catalog Service:', error.message)
     }
   }
+}
+
+async function adjustEventSeats(event, eventId, quantity){
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+  console.log(`Adjusting seats for eventId ${eventId} by ${quantity}. Current seats available: ${event.seats_available}`);
+  try {
+          const updateResponse = await fetch(`http://event-catalog-service:3001/events/${eventId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              ...event,
+              seats_available: event.seats_available + quantity,
+            }),
+          });
+          if (!updateResponse.ok) {
+            throw new Error(`Failed to update seats for eventId: ${eventId}`);
+          }
+        } catch (updateErr) {
+          console.error("Failed to update seats in Event Catalog Service:", updateErr.message);
+          return res.status(502).json({
+            error: "Event Catalog Service unreachable",
+            purchase: result.rows[0],
+          });
+        }
+        
 }
 
 app.get("/", (req, res) => {
@@ -155,6 +182,23 @@ app.post("/purchases", async (req, res) => {
         idempotencyKey,
       ]
     );
+    const event = (await fetchEvent(eventId))?.event || null;
+    if (!event) {
+      return res.status(404).json({ error: "Event not found for eventId: " + eventId });
+    }
+
+    //if there is no seats available, push the purchase onto waiting list and return response to user
+      if(event.seats_available < quantity){
+        //push purchase object onto waiting queue in Redis
+        await redisClient.lPush("waitlist", JSON.stringify(result.rows[0]));
+        return res.status(200).json({
+          message: "Purchase created but added to waiting list due to insufficient seats",
+          purchase: result.rows[0],
+          event,
+        });
+      }
+      //otherwise, decrement the available seats in the event catalog service using the put route and proceed with payment
+      await adjustEventSeats(event, eventId, -quantity);
 
     const purchase = result.rows[0];
 
@@ -171,6 +215,7 @@ app.post("/purchases", async (req, res) => {
       paymentResult = await paymentResponse.json();
     } catch (paymentErr) {
       console.error("Failed to reach Payment Service:", paymentErr.message);
+      await adjustEventSeats(event, eventId, quantity); // Rollback seat reservation
       return res.status(502).json({
         error: "Payment Service unreachable",
         purchase,
@@ -205,6 +250,7 @@ app.post("/purchases", async (req, res) => {
         payment: paymentResult,
       });
     } else {
+      await adjustEventSeats(event, eventId, quantity); // Rollback seat reservation on payment failure
       return res.status(402).json({
         message: "Purchase created but payment failed",
         purchase: updatedPurchase.rows[0],
