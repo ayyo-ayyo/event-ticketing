@@ -41,9 +41,9 @@ docker compose exec holmes bash
 ### Base URLs (development)
 
 ```
-event-catalog-service  http://localhost:3003
+event-catalog-service  http://localhost:3001
 ticket-purchase-service http://localhost:3002
-payment-service http://localhost:3001
+payment-service http://localhost:3003
 holmes                 (no port — access via exec)
 ```
 
@@ -89,7 +89,7 @@ GET /health
 **Example request:**
 
 ```bash
-curl http://localhost:3003/health
+curl http://localhost:3001/health
 ```
 
 **Example response (200):**
@@ -127,7 +127,7 @@ GET /events/:id
 **Example request:**
 
 ```bash
-curl http://localhost:3003/events/1
+curl http://localhost:3001/events/1
 ```
 
 **Example response (200):**
@@ -169,7 +169,7 @@ GET /health
 **Example request:**
 
 ```bash
-curl http://localhost:3003/health
+curl http://localhost:3001/health
 ```
 
 **Example response (200):**
@@ -208,7 +208,7 @@ GET /events/:id
 **Example request:**
 
 ```bash
-curl http://localhost:3003/events/1
+curl http://localhost:3001/events/1
 ```
 
 **Example response (placeholder, 200):**
@@ -243,7 +243,7 @@ GET /info
 **Example request:**
 
 ```bash
-curl http://localhost:3003/info
+curl http://localhost:3001/info
 ```
 
 **Example response (200):**
@@ -388,17 +388,16 @@ curl -X POST http://localhost:3002/purchases \
 ```
 GET /health
 
-  Returns health status for the payment service and its Postgres dependency.
+  Returns health status for the payment service.
 
   Responses:
     200  Service healthy
-    503  Database unreachable
 ```
 
 **Example request:**
 
 ```bash
-curl http://localhost:3001/health
+curl http://localhost:3003/health
 ```
 
 **Example response (200):**
@@ -406,8 +405,7 @@ curl http://localhost:3001/health
 ```json
 {
   "status": "healthy",
-  "service": "payment-service",
-  "database": "up"
+  "service": "payment-service"
 }
 ```
 
@@ -416,7 +414,7 @@ curl http://localhost:3001/health
 ```
 POST /payments
 
-  Processes a payment for an existing purchase record.
+  Processes a payment request and returns the payment result.
 
   Body (JSON):
     purchaseId: integer
@@ -424,15 +422,13 @@ POST /payments
   Responses:
     200  Payment processed (success)
     402  Payment declined
-    404  Purchase not found
     400  Missing purchaseId
-    500  Internal server error
 ```
 
 **Example request:**
 
 ```bash
-curl -X POST http://localhost:3001/payments \
+curl -X POST http://localhost:3003/payments \
   -H "Content-Type: application/json" \
   -d '{"purchaseId":1}'
 ```

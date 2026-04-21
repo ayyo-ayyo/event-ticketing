@@ -55,11 +55,11 @@ services:
     container_name: event-catalog-service
     restart: unless-stopped
     ports:
-      - "3001:3003"
+      - "3001:3001"
     networks:
       - team-net
     environment:
-      - PORT=3003
+      - PORT=3001
       - DATABASE_URL=postgres://catalog:catalog@event-catalog-db:5432/event_catalog
       - REDIS_URL=redis://redis:6379
     depends_on:
@@ -68,7 +68,7 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3003/health"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:3001/health"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -172,6 +172,7 @@ services:
       POSTGRES_DB: event_catalog
     volumes:
       - event-catalog-db-data:/var/lib/postgresql/data
+      - ./event-catalog-service/sql/init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - team-net
     healthcheck:
@@ -200,6 +201,27 @@ services:
       retries: 10
 
 
+  notification-service:
+    build: ./notification-service
+    container_name: notification-service
+    restart: unless-stopped
+    ports:
+      - "3004:3004"
+    networks:
+      - team-net
+    environment:
+      PORT: 3004
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3004/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
   redis:
     image: redis:7
     container_name: redis
@@ -211,6 +233,30 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+
+  waitlist-worker:
+    build: ./waitlist-worker
+    container_name: waitlist-worker
+    restart: unless-stopped
+    ports:
+      - "3005:3005"
+    networks:
+      - team-net
+    environment:
+      - PORT=3005
+      - REDIS_URL=redis://redis:6379
+      - TICKET_PURCHASE_SERVICE_URL=http://ticket-purchase-service:3002
+    depends_on:
+      redis:
+        condition: service_healthy
+      ticket-purchase-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3005/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
 
 volumes:
   purchase-db-data:
