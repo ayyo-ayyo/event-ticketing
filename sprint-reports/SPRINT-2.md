@@ -54,7 +54,12 @@ The VUs were also changed between Sprint 1 and Sprint 2, from 20 to 100. Althoug
 ### Test 2: Async Pipeline Burst (`k6/sprint-2-async.js`)
 
 ```
-[Paste k6 summary output here]
+| Metric | Sprint 2 Async    |
+| ------ | ----------------- |
+| p50    | .         |
+| p95    | .              |
+| p99    | .            |
+| RPS    | .        |
 ```
 
 Worker health during the burst (hit `/health` while k6 is running):
@@ -63,7 +68,26 @@ Worker health during the burst (hit `/health` while k6 is running):
 [Paste an example health response showing non-zero queue depth]
 ```
 
-Idempotency check: [Describe what you sent and what happened when you sent the same idempotency key twice.]
+Idempotency check: 
+Using curl to post an entry to the ticket purchasing system:
+$ curl -X POST http://ticket-purchase-service:3002/purchases \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": 1,
+    "eventId": 2,
+    "quantity": 1,
+    "unitTicketCents": 5000,
+    "idempotencyKey": "key1"
+  }'
+
+Response: "message":"Purchase created and payment processed", ... 
+"status":"success","purchaseId":475,"message":"Payment processed"
+
+Repeating the same post entry or changing the other values but keeping the same idempotency key should result in a decline due to duplicates. Doing this, the result is:
+
+Response" "message":"Duplicate request detected, returning existing purchase"
+
+So, we get the same response from sending the same idempotency key, even when changing other values. This is how the implementation of idempotency should be working.
 
 ---
 
