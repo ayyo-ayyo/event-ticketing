@@ -26,7 +26,7 @@ async function connectRedis(){
 //HTTP to connect to the ticket purchase service
 async function connectTicketPurchaseService(){
   try{
-    const response = await fetch('http://ticket-purchase-service/info');
+    const response = await fetch('http://ticket-purchase-service:3002/');
 
     if(!response.ok){
       throw new Error(`HTTP error, status: ${response.status}`);
@@ -36,6 +36,22 @@ async function connectTicketPurchaseService(){
     console.log(data);
   }catch(error){
     console.log('Error calling the ticket purchase service: ', error.message);
+  }
+}
+
+//HTTP to connect to the payment service
+async function connectPaymentService(){
+  try{
+    const response = await fetch('http://payment-service:3003/health');
+
+    if(!response.ok){
+      throw new Error(`HTTP error, status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log(data);
+  }catch(error){
+    console.log('Error calling the payment service: ', error.message)
   }
 }
 
@@ -75,19 +91,25 @@ app.get('/health', async (req, res) => {
 });
 
 app.post('/refunds', async (req, res) => {
+  const idempotencyKey = req.header('Idempotency-Key')?.trim();
   const {
     userId,
     purchaseId,
     eventId,
     quantity, 
     refundAmountCents, 
-    idempotencyKey
   } = req.body;
 
-  if (!userId || !purchaseId || !eventId || !quantity || !refundAmountCents || !idempotencyKey) {
+  if(!idempotencyKey){
+    return res.status(400).json({
+      error: 'Idempotency-Key header required'
+    })
+  }
+
+  if (!userId || !purchaseId || !eventId || !quantity || !refundAmountCents) {
     return res.status(400).json({
       error:
-        'userId, purchaseId, eventId, quantity, refundAmountCents, and idempotencyKey are required',
+        'userId, purchaseId, eventId, quantity, and refundAmountCents are required',
     });
   }
 
@@ -102,6 +124,27 @@ app.post('/refunds', async (req, res) => {
         message: 'Duplicate refund, exiting refund service',
         purchase: existing.rows[0],
       });
+    }
+
+    const purchaseResponse = await fetch(`http://ticket-purchase-service:3002/purchases/${purchaseId}`);
+
+    if(purchaseResponse.status === 404){
+      return res.status(404).json({ error: 'Purchase not found' });
+    }
+
+    if(!purchaseResponse.ok){
+      return res.status(502).json({ error: 'Failed to reach ticket-purchase-service' });
+    }
+
+    const paymentResponse = await fetch('http://payment-service:3003/payments/refunds', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ purchaseId })
+    });
+
+    if(!paymentResponse.ok){
+      const paymentResult = await paymentResponse.json();
+      return res.status(502).json({ error: 'Refund payment reversal failed', detail: paymentResult.message });
     }
 
     const result = await pool.query(
@@ -144,6 +187,7 @@ async function startServer(){
   }
 
   await connectTicketPurchaseService();
+  await connectPaymentService();
 }
 
 startServer();
