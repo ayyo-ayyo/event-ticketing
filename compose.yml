@@ -189,6 +189,30 @@ services:
       timeout: 3s
       retries: 5
 
+  waitlist-worker:
+    build: ./waitlist-worker
+    container_name: waitlist-worker
+    restart: unless-stopped
+    ports:
+      - "3005:3005"
+    networks:
+      - team-net
+    environment:
+      - PORT=3005
+      - REDIS_URL=redis://redis:6379
+      - TICKET_PURCHASE_SERVICE_URL=http://ticket-purchase-service:3002
+    depends_on:
+      redis:
+        condition: service_healthy
+      ticket-purchase-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3005/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
 volumes:
   purchase-db-data:
   event-catalog-db-data:
