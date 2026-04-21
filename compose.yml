@@ -36,18 +36,18 @@ services:
   # are accessible without copying them into the container.
   #
   # See holmes/README.md for a full tool reference.
-  holmes:
-    build:
-      context: ./holmes
-      dockerfile: Dockerfile
-    container_name: holmes
-    restart: unless-stopped
-    volumes:
-      - .:/workspace
-    networks:
-      - team-net
-    environment:
-      - TERM=xterm-256color
+  #holmes:
+   # build:
+    #  context: ./holmes
+     # dockerfile: Dockerfile
+    #container_name: holmes
+    #restart: unless-stopped
+    #volumes:
+      #- .:/workspace
+    #networks:
+     # - team-net
+    #environment:
+     # - TERM=xterm-256color
     # Holmes has no ports — access it via: docker compose exec holmes bash
 
   event-catalog-service:
@@ -112,12 +112,46 @@ services:
       - team-net
     environment:
       - PORT=3003
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:3003/health"]
       interval: 10s
       timeout: 5s
       retries: 3
       start_period: 15s
+
+
+  refund-service:
+    build: ./refund-service
+    container_name: refund-service
+    restart: unless-stopped
+    ports:
+      - "3006:3006"
+    networks:
+      - team-net
+    environment:
+      - PORT=3006
+      - DATABASE_URL=postgres://postgres:password@refund-service-db:5432/refund-service
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+      refund-service-db:
+        condition: service_healthy
+      ticket-purchase-service:
+        condition: service_healthy
+      payment-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3006/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
   purchase-db:
     image: postgres:16
     container_name: purchase-db
@@ -151,6 +185,25 @@ services:
       - team-net
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U catalog -d event_catalog"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  refund-service-db:
+    image: postgres:16
+    container_name: refund-service-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: refund-service
+    volumes:
+      - refund-service-db-data:/var/lib/postgresql/data
+      - ./refund-service/sql/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - team-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d refund-service"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -216,3 +269,4 @@ services:
 volumes:
   purchase-db-data:
   event-catalog-db-data:
+  refund-service-db-data:

@@ -112,6 +112,27 @@ app.get("/health", async (req, res) => {
   });
 });
 
+//Endpoint to validate that a purchase exists for the refund service
+app.get('/purchases/:id', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const result = await pool.query(
+      'SELECT * FROM purchases WHERE id = $1',
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Purchase not found' });
+    }
+
+    return res.status(200).json({ purchase: result.rows[0] });
+  } catch (error) {
+    console.error('Failed to fetch purchase:', error.message);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 app.post("/purchases", async (req, res) => {
   const idempotencyKey = req.header("Idempotency-Key")?.trim();
   const {
