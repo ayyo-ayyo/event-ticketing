@@ -44,6 +44,11 @@ async function connectEventCatalogService(){
   }
 }
 
+//function to push failed or cancelled order to waitlist q
+function waitlistPush(purchase) {
+  await redisClient.lPush("waitlist", JSON.stringify(purchase));
+}
+
 app.get("/", (req, res) => {
   res.json({
     service: "ticket-purchase-service",
@@ -139,6 +144,8 @@ app.post("/purchases", async (req, res) => {
       paymentResult = await paymentResponse.json();
     } catch (paymentErr) {
       console.error("Failed to reach Payment Service:", paymentErr.message);
+      //put it on the waitlist q, maybe the service will be reachable later
+      waitlistPush(req.body);
       return res.status(502).json({
         error: "Payment Service unreachable",
         purchase,
@@ -159,6 +166,8 @@ app.post("/purchases", async (req, res) => {
       );
     } catch (statusErr) {
       console.error("Failed to update payment status:", statusErr.message);
+      //put in waitlist queue, idempotency key will keep the same operation from happening again, and just update the status
+      waitlistPush(req.body);
       return res.status(500).json({
         error: "Payment processed but failed to update purchase status",
         purchase,
@@ -173,6 +182,8 @@ app.post("/purchases", async (req, res) => {
         payment: paymentResult,
       });
     } else {
+      //put in the queue to retry payment later
+      waitlistPush(req.body);
       return res.status(402).json({
         message: "Purchase created but payment failed",
         purchase: updatedPurchase.rows[0],
