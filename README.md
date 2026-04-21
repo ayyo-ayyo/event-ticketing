@@ -41,7 +41,9 @@ docker compose exec holmes bash
 ### Base URLs (development)
 
 ```
-event-catalog-service  http://localhost:3003
+event-catalog-service  http://localhost:3001
+ticket-purchase-service http://localhost:3002
+payment-service http://localhost:3003
 holmes                 (no port — access via exec)
 ```
 
@@ -87,7 +89,7 @@ GET /health
 **Example request:**
 
 ```bash
-curl http://localhost:3003/health
+curl http://localhost:3001/health
 ```
 
 **Example response (200):**
@@ -125,7 +127,7 @@ GET /events/:id
 **Example request:**
 
 ```bash
-curl http://localhost:3003/events/1
+curl http://localhost:3001/events/1
 ```
 
 **Example response (200):**
@@ -147,7 +149,309 @@ curl http://localhost:3003/events/1
 
 <!-- Add the rest of your endpoints below. One ### section per endpoint. -->
 
+
 ---
+
+### Event Catalog Service
+
+### GET /health
+
+```
+GET /health
+
+  Returns the health status of this service and its dependencies (Postgres and Redis).
+
+  Responses:
+    200  Service and all dependencies healthy
+    503  One or more dependencies unreachable
+```
+
+**Example request:**
+
+```bash
+curl http://localhost:3001/health
+```
+
+**Example response (200):**
+
+```json
+{
+  "status": "healthy",
+  "db": "ok",
+  "redis": "ok"
+}
+```
+
+**Example response (503):**
+
+```json
+{
+  "status": "unhealthy",
+  "db": "ok",
+  "redis": "error: connect ECONNREFUSED"
+}
+```
+
+### GET /events/:id
+
+```
+GET /events/:id
+
+  Returns one event by id. Attempts to read from Redis cache and falls back
+  to placeholder event data (until DB-backed listing is implemented).
+
+  Responses:
+    200  Event payload returned (source: cache | placeholder)
+    500  Failed to fetch event
+```
+
+**Example request:**
+
+```bash
+curl http://localhost:3001/events/1
+```
+
+**Example response (placeholder, 200):**
+
+```json
+{
+  "source": "placeholder",
+  "event": {
+    "id": "1",
+    "title": "Placeholder Concert",
+    "venue": "Downtown Arena",
+    "date": "2026-10-31T20:00:00Z",
+    "currency": "USD",
+    "basePriceCents": 6500,
+    "seatsAvailable": 240
+  }
+}
+```
+
+### GET /info
+
+```
+GET /info
+
+  Simple service-to-service health/info endpoint used by other services
+  to verify connectivity.
+
+  Responses:
+    200  Returns a short JSON message
+```
+
+**Example request:**
+
+```bash
+curl http://localhost:3001/info
+```
+
+**Example response (200):**
+
+```json
+{ "message": "Message from Event Catalog Service" }
+```
+
+---
+
+### Ticket Purchase Service
+
+### GET /
+
+```
+GET /
+
+  Basic service info endpoint.
+
+  Responses:
+    200  Service information
+```
+
+**Example request:**
+
+```bash
+curl http://localhost:3002/
+```
+
+**Example response (200):**
+
+```json
+{
+  "service": "ticket-purchase-service",
+  "message": "running"
+}
+```
+
+### GET /health
+
+```
+GET /health
+
+  Returns health status for Postgres and Redis used by this service.
+
+  Responses:
+    200  Service and dependencies healthy
+    503  One or more dependencies unreachable
+```
+
+**Example request:**
+
+```bash
+curl http://localhost:3002/health
+```
+
+**Example response (200):**
+
+```json
+{
+  "status": "healthy",
+  "service": "ticket-purchase-service",
+  "database": "up",
+  "redis": "up"
+}
+```
+
+### POST /purchases
+
+```
+POST /purchases
+
+  Creates a purchase reservation and synchronously calls the Payment Service
+  to process payment. Requires idempotency by `idempotencyKey`.
+
+  Body (JSON):
+    userId: string
+    eventId: string
+    quantity: integer
+    unitTicketCents: integer
+    idempotencyKey: string
+
+  Responses:
+    201  Purchase created and payment processed
+    402  Purchase created but payment failed (declined)
+    400  Missing or invalid request body
+    502  Payment Service unreachable
+    500  Internal server error
+```
+
+**Example request:**
+
+```bash
+curl -X POST http://localhost:3002/purchases \
+  -H "Content-Type: application/json" \
+  -d '{"userId":"u1","eventId":"e1","quantity":2,"unitTicketCents":6500,"idempotencyKey":"key-123"}'
+```
+
+**Example response (201):**
+
+```json
+{
+  "message": "Purchase created and payment processed",
+  "purchase": {
+    "id": 1,
+    "user_id": "u1",
+    "event_id": "e1",
+    "quantity": 2,
+    "unit_ticket_cents": 6500,
+    "reservation_status": "reserved",
+    "payment_status": "paid",
+    "idempotency_key": "key-123"
+  },
+  "payment": {
+    "status": "success",
+    "purchaseId": 1,
+    "message": "Payment processed"
+  }
+}
+```
+
+**Example response (402 payment declined):**
+
+```json
+{
+  "message": "Purchase created but payment failed",
+  "purchase": { /* purchase record */ },
+  "payment": {
+    "status": "failed",
+    "purchaseId": 1,
+    "message": "Payment declined"
+  }
+}
+```
+
+---
+
+### Payment Service
+
+### GET /health
+
+```
+GET /health
+
+  Returns health status for the payment service.
+
+  Responses:
+    200  Service healthy
+```
+
+**Example request:**
+
+```bash
+curl http://localhost:3003/health
+```
+
+**Example response (200):**
+
+```json
+{
+  "status": "healthy",
+  "service": "payment-service"
+}
+```
+
+### POST /payments
+
+```
+POST /payments
+
+  Processes a payment request and returns the payment result.
+
+  Body (JSON):
+    purchaseId: integer
+
+  Responses:
+    200  Payment processed (success)
+    402  Payment declined
+    400  Missing purchaseId
+```
+
+**Example request:**
+
+```bash
+curl -X POST http://localhost:3003/payments \
+  -H "Content-Type: application/json" \
+  -d '{"purchaseId":1}'
+```
+
+**Example response (200):**
+
+```json
+{
+  "status": "success",
+  "purchaseId": 1,
+  "message": "Payment processed"
+}
+```
+
+**Example response (402):**
+
+```json
+{
+  "status": "failed",
+  "purchaseId": 1,
+  "message": "Payment declined"
+}
+```
 
 ## Sprint History
 

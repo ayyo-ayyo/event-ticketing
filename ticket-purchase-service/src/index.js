@@ -9,6 +9,7 @@ const PORT = process.env.PORT || 3002;
 const DATABASE_URL = process.env.DATABASE_URL;
 const REDIS_URL = process.env.REDIS_URL;
 const PAYMENT_SERVICE_URL = process.env.PAYMENT_SERVICE_URL;
+const POSTGRES_UNIQUE_VIOLATION = "23505";
 
 const pool = new Pool({
   connectionString: DATABASE_URL,
@@ -31,8 +32,12 @@ async function connectRedis() {
 
 // HTTP to connect to Event Catalog Service
 async function connectEventCatalogService(){
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000); // Timeout 5s
+
   try{
-    const response = await fetch("http://event-catalog-service:3003/info")
+    const response = await fetch("http://event-catalog-service:3001/info", {signal: controller.signal});
+    clearTimeout(timeout);
 
     if(!response.ok){
       throw new Error(`HTTP error. Status: ${response.status}`);
@@ -40,7 +45,35 @@ async function connectEventCatalogService(){
     const data = await response.json();
     console.log(data);
   } catch (error) {
-    console.error('Error calling Event Catalog Service:', error.message)
+    if(error.name == "AbortError"){
+      console.error('Error: Timeout on HTTP request to Event Catalog Service');
+    } else {
+      console.error('Error calling Event Catalog Service:', error.message)
+    }
+  }
+}
+
+// Use this function for fetching events corresponding to the ticket
+async function fetchEvent(eventId){ 
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000); // Timeout 5s;
+  try{
+    const response = await fetch(`http://event-catalog-service:3001/events/${eventId}`, {signal: controller.signal});
+    clearTimeout(timeout);
+
+    if(!response.ok){
+    throw new Error(`HTTP error. Status: ${response.status}`)
+    }
+  const event = await response.json();
+  return event;
+
+  } catch (error) {
+    if(error.name == "AbortError"){
+      console.error('')
+      console.error('Error: Timeout on HTTP request for fetching event based on eventId');
+    } else {
+      console.error('Error fetching event from Event Catalog Service:', error.message)
+    }
   }
 }
 
@@ -80,82 +113,130 @@ app.get("/health", async (req, res) => {
 });
 
 app.post("/purchases", async (req, res) => {
+  const idempotencyKey = req.header("Idempotency-Key")?.trim();
   const {
     userId,
     eventId,
     quantity,
     unitTicketCents,
-    idempotencyKey,
   } = req.body;
 
-  if (!userId || !eventId || !quantity || !unitTicketCents || !idempotencyKey) {
+  if (!idempotencyKey) {
     return res.status(400).json({
-      error:
-        "userId, eventId, quantity, unitTicketCents, and idempotencyKey are required",
+      error: "Idempotency-Key header is required",
+    });
+  }
+
+  if (!userId || !eventId || !quantity || !unitTicketCents) {
+    return res.status(400).json({
+      error: "userId, eventId, quantity, and unitTicketCents are required",
     });
   }
 
   try {
-    const existing = await pool.query(
-      "SELECT * FROM purchases WHERE idempotency_key = $1",
-      [idempotencyKey]
-    );
+    let result;
 
-    if (existing.rows.length > 0) {
-      return res.status(200).json({
-        message: "Duplicate request detected, returning existing purchase",
-        purchase: existing.rows[0],
-      });
+    try {
+      result = await pool.query(
+        `INSERT INTO purchases
+         (user_id, event_id, quantity, unit_ticket_cents, reservation_status, payment_status, idempotency_key)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         RETURNING *`,
+        [
+          userId,
+          eventId,
+          quantity,
+          unitTicketCents,
+          "reserved",
+          "pending",
+          idempotencyKey,
+        ]
+      );
+    } catch (insertErr) {
+      if (insertErr.code === POSTGRES_UNIQUE_VIOLATION) {
+        const existing = await pool.query(
+          "SELECT * FROM purchases WHERE idempotency_key = $1",
+          [idempotencyKey]
+        );
+
+        if (existing.rows.length > 0) {
+          return res.status(200).json({
+            message: "Duplicate request detected, returning existing purchase",
+            purchase: existing.rows[0],
+          });
+        }
+      }
+
+      throw insertErr;
     }
-
-    const result = await pool.query(
-      `INSERT INTO purchases
-       (user_id, event_id, quantity, unit_ticket_cents, reservation_status, payment_status, idempotency_key)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       RETURNING *`,
-      [
-        userId,
-        eventId,
-        quantity,
-        unitTicketCents,
-        "reserved",
-        "pending",
-        idempotencyKey,
-      ]
-    );
 
     const purchase = result.rows[0];
 
     // Synchronous HTTP call to Payment Service
     let paymentResult;
+    let paymentResponse;
     try {
-      const paymentResponse = await fetch(`${PAYMENT_SERVICE_URL}/payments`, {
+      paymentResponse = await fetch(`${PAYMENT_SERVICE_URL}/payments`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ purchaseId: purchase.id }),
       });
 
       paymentResult = await paymentResponse.json();
-
-      if (paymentResponse.ok) {
-        return res.status(201).json({
-          message: "Purchase created and payment processed",
-          purchase,
-          payment: paymentResult,
-        });
-      } else {
-        // Payment declined — purchase record is already marked failed by payment service
-        return res.status(402).json({
-          message: "Purchase created but payment failed",
-          purchase,
-          payment: paymentResult,
-        });
-      }
     } catch (paymentErr) {
       console.error("Failed to reach Payment Service:", paymentErr.message);
       return res.status(502).json({
         error: "Payment Service unreachable",
         purchase,
+      });
+    }
+
+    const paymentStatus = paymentResponse.ok ? "paid" : "failed";
+    const reservationStatus = paymentResponse.ok ? "confirmed" : "released";
+    let updatedPurchase;
+
+    try {
+      updatedPurchase = await pool.query(
+        `UPDATE purchases
+         SET payment_status = $1, reservation_status = $2
+         WHERE id = $3
+         RETURNING *`,
+        [paymentStatus, reservationStatus, purchase.id]
+      );
+    } catch (statusErr) {
+      console.error("Failed to update payment status:", statusErr.message);
+      return res.status(500).json({
+        error: "Payment processed but failed to update purchase status",
+        purchase,
+        payment: paymentResult,
+      });
+    }
+
+    if (paymentResponse.ok) {
+      // Publish to notification queue so the Notification Worker sends a confirmation email
+      const confirmedPurchase = updatedPurchase.rows[0];
+      const notificationJob = JSON.stringify({
+        purchaseId: confirmedPurchase.id,
+        userId: confirmedPurchase.user_id,
+        eventId: confirmedPurchase.event_id,
+        quantity: confirmedPurchase.quantity,
+        unitTicketCents: confirmedPurchase.unit_ticket_cents,
+      });
+      await redisClient.lPush("notification:queue", notificationJob);
+      console.log(
+        `[ticket-purchase-service] Published notification job for purchaseId=${confirmedPurchase.id}`
+      );
+
+      return res.status(201).json({
+        message: "Purchase created and payment processed",
+        purchase: confirmedPurchase,
+        payment: paymentResult,
+      });
+    } else {
+      return res.status(402).json({
+        message: "Purchase created but payment failed",
+        purchase: updatedPurchase.rows[0],
+        payment: paymentResult,
       });
     }
   } catch (err) {

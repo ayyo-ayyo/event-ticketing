@@ -38,47 +38,45 @@ Get some of our workers and services running:
 
 ## Tasks
 
-### [Name]
+### Mateus
 
 - [ ] Cache event details for event catalog
 
-### [Name]
+### Maycol
 
 - [ ] Make Ticket Purchase idempotent
 
-### [Name]
+### Lucky
 
 - [ ] Make Payment idempotent
 
-### [Name]
+### Jimmy
 
 - [ ] Get Notification Service/Worker running
     - [ ] also expose a GET /health endpoint that includes the current queue depth, the dead letter queue depth, and the timestamp of the last successfully processed job.
     - [ ] Workers log what they are doing so a TA can see the pipeline in action in the Docker Compose logs
 
-### [Name]
+### Brian
 
 - [ ] Waitlist Worker 
     - [ ] exposes GET /health endpoint that includes the current queue depth, the dead letter queue depth, and the timestamp of the last successfully processed job.
     - [ ] Workers log what they are doing so a TA can see the pipeline in action in the Docker Compose logs
 
-### [Name]
+### Derek
 
 - [ ] Refund Service 
 
-### [Name]
+### Ayo
 
 - [ ] Async pipeline: Ticket Purchase Service pushes message onto Redis queue about waitlist entries, Waitlist Worker consumes it
     - [ ] When a ticket is released (cancellation or payment failure), the worker promotes the next waitlisted user and publishes a purchase event. Must handle poison pills — a malformed waitlist entry should be moved to a dead letter queue, not retried forever.
 
-### [Name]
+### Shaun
 
 - [ ] k6 load test async
 - [ ] k6 load test cache    
 
-### [Name]
 
-- [ ] README
 
 ---
 

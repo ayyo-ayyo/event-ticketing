@@ -50,53 +50,29 @@ services:
       - TERM=xterm-256color
     # Holmes has no ports — access it via: docker compose exec holmes bash
 
-  # ── Add your services here ─────────────────────────────────────────────────
-  #
-  # Pattern for each service:
-  #
-  # your-service:
-  #   build: ./your-service
-  #   container_name: your-service
-  #   restart: unless-stopped
-  #   ports:
-  #     - "3001:3001"          # expose on host for local testing
-  #   networks:
-  #     - team-net             # REQUIRED — makes it reachable from holmes
-  #   environment:
-  #     - DATABASE_URL=postgres://user:pass@postgres:5432/yourdb
-  #     - REDIS_URL=redis://redis:6379
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
-  #     redis:
-  #       condition: service_healthy
-  #   healthcheck:
-  #     test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
-  #     interval: 10s
-  #     timeout: 5s
-  #     retries: 3
-  #     start_period: 15s
-  #
-
-  payment-service:
-    build: ./payment-service
-    container_name: payment-service
+  event-catalog-service:
+    build: ./event-catalog-service
+    container_name: event-catalog-service
     restart: unless-stopped
     ports:
       - "3001:3001"
     networks:
       - team-net
     environment:
-      PORT: 3001
-      DATABASE_URL: postgres://postgres:postgres@purchase-db:5432/purchase_db
+      - PORT=3001
+      - DATABASE_URL=postgres://catalog:catalog@event-catalog-db:5432/event_catalog
+      - REDIS_URL=redis://redis:6379
     depends_on:
-      purchase-db:
+      event-catalog-db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3001/health"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:3001/health"]
       interval: 10s
       timeout: 5s
-      start_period: 15s
+      retries: 5
+      start_period: 20s
 
   ticket-purchase-service:
     build: ./ticket-purchase-service
@@ -110,11 +86,15 @@ services:
       PORT: 3002
       DATABASE_URL: postgres://postgres:postgres@purchase-db:5432/purchase_db
       REDIS_URL: redis://redis:6379
-      PAYMENT_SERVICE_URL: http://payment-service:3001
+      PAYMENT_SERVICE_URL: http://payment-service:3003
     depends_on:
       purchase-db:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      event-catalog-service:
+        condition: service_healthy
+      payment-service:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:3002/health"]
@@ -122,6 +102,22 @@ services:
       timeout: 5s
       start_period: 15s
 
+  payment-service:
+    build: ./payment-service
+    container_name: payment-service
+    restart: unless-stopped
+    ports:
+      - "3003:3003"
+    networks:
+      - team-net
+    environment:
+      - PORT=3003
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3003/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
   purchase-db:
     image: postgres:16
     container_name: purchase-db
@@ -140,39 +136,47 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
-  # ── Postgres template ──────────────────────────────────────────────────────
-  #
-  # postgres:
-  #   image: postgres:16
-  #   container_name: postgres
-  #   restart: unless-stopped
-  #   environment:
-  #     POSTGRES_USER: user
-  #     POSTGRES_PASSWORD: pass
-  #     POSTGRES_DB: mydb
-  #   volumes:
-  #     - postgres-data:/var/lib/postgresql/data
-  #   networks:
-  #     - team-net
-  #   healthcheck:
-  #     test: ["CMD-SHELL", "pg_isready -U user -d mydb"]
-  #     interval: 5s
-  #     timeout: 3s
-  #     retries: 5
-  #
-  # ── Redis template ─────────────────────────────────────────────────────────
-  #
-  # redis:
-  #   image: redis:7
-  #   container_name: redis
-  #   restart: unless-stopped
-  #   networks:
-  #     - team-net
-  #   healthcheck:
-  #     test: ["CMD", "redis-cli", "ping"]
-  #     interval: 5s
-  #     timeout: 3s
-  #     retries: 5
+  event-catalog-db:
+    image: postgres:16
+    container_name: event-catalog-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: catalog
+      POSTGRES_PASSWORD: catalog
+      POSTGRES_DB: event_catalog
+    volumes:
+      - event-catalog-db-data:/var/lib/postgresql/data
+      - ./event-catalog-service/sql/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - team-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U catalog -d event_catalog"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+
+  notification-service:
+    build: ./notification-service
+    container_name: notification-service
+    restart: unless-stopped
+    ports:
+      - "3004:3004"
+    networks:
+      - team-net
+    environment:
+      PORT: 3004
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3004/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
   redis:
     image: redis:7
     container_name: redis
@@ -185,54 +189,6 @@ services:
       timeout: 3s
       retries: 5
 
-  event-catalog-service:
-    build: ./event-catalog-service
-    container_name: event-catalog-service
-    restart: unless-stopped
-    ports:
-      - "3003:3003"
-    networks:
-      - team-net
-    environment:
-      - PORT=3003
-      - DATABASE_URL=postgres://catalog:catalog@event-catalog-db:5432/event_catalog
-      - REDIS_URL=redis://redis:6379
-    depends_on:
-      event-catalog-db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3003/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 20s
-
-  event-catalog-db:
-    image: postgres:16
-    container_name: event-catalog-db
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: catalog
-      POSTGRES_PASSWORD: catalog
-      POSTGRES_DB: event_catalog
-    volumes:
-      - event-catalog-db-data:/var/lib/postgresql/data
-    networks:
-      - team-net
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U catalog -d event_catalog"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-
-
-# ── Named volumes ──────────────────────────────────────────────────────────────
-# Declare a volume for each database here, e.g.:
-#
-# volumes:
-#   postgres-data:
 volumes:
   purchase-db-data:
   event-catalog-db-data:

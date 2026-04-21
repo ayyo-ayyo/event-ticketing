@@ -8,7 +8,7 @@
 
 ## What We Built
 
-[One or two paragraphs. What is running? What does `docker compose up` produce? What endpoints are live?]
+We've laid the foundation of the three core services of the event ticketing app, the ticket purchase service, the event catalog service and the payment service. Each core service has a `GET /health` endpoint and another endpoint unique to it, `POST /purchases` (to create new purchases) for the ticket purchase service, `GET /events/:id` for the event catalog service, and `POST /payments` (to process purchases) for the payment service. There is also a test route `GET /info` on the event catalog services that the ticket purchase service calls to test cross-service connection, there's also a call from the ticket purchase service to the payment service for the route `POST /payments` for a similar purpose.
 
 ---
 
@@ -17,6 +17,7 @@
 | Team Member | What They Delivered                                     | Key Commits            |
 | ----------- | ------------------------------------------------------- | ---------------------- |
 | Lucky K      | Customized k6 load test script and added synthesized baseline results into Sprint 1 Report    | 21e0942 |
+| Jimmy J | Implemented synchronous service call from ticket purchase service to payment service | 20efa35b1bec690849c37d2be82d98e7a54bb6bf |
 | [Name]      | [e.g. restaurant-service, synchronous call integration] |                        |
 | Sean R      | Completed service to service HTTP call from Ticket Purchasing service to Event Catalog Service | 27169c833d36aae729a48b9df60346d68834113f |
 | Maycol M      | Finish setting the ticket purshcase service and made db for it           |     5dcf088a81be18773fa7281984e8c26e1cabd49e, and 1beb13e7a1f92d34073a39de9840465d604623ef                   |
@@ -34,17 +35,17 @@ git log --author="Name" --oneline -- path/to/directory/
 
 ## What Is Working
 
-- [ ] `docker compose up` starts all services without errors
-- [ ] `docker compose ps` shows every service as `(healthy)`
-- [ ] `GET /health` on every service returns `200` with DB and Redis status
-- [ ] At least one synchronous service-to-service call works end-to-end
-- [ ] k6 baseline test runs successfully
+- [X] `docker compose up` starts all services without errors
+- [X] `docker compose ps` shows every service as `(healthy)`
+- [X] `GET /health` on every service returns `200` with DB and Redis status
+- [X] At least one synchronous service-to-service call works end-to-end
+- [X] k6 baseline test runs successfully
 
 ---
 
 ## What Is Not Working / Cut
 
-[Be honest. What did you not finish? What did you cut from the sprint plan and why? How will you address it in Sprint 2?]
+We did everything that we wanted to do in this sprint
 
 ---
 
@@ -113,4 +114,4 @@ These numbers are your baseline. Sprint 2 caching should improve them measurably
 
 ## Blockers and Lessons Learned
 
-[What slowed you down? What would you do differently? What surprised you?]
+Definitely should try to split tasks so everyone can code, and document their own stuff, even if everyone can't work on a core service. We also want to try to make sure we know which tasks depend on other beforehand
