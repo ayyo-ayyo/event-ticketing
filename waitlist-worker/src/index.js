@@ -93,13 +93,15 @@ async function processMessage(raw) {
     eventId: purchase.eventId,
     quantity: purchase.quantity,
     unitTicketCents: purchase.unitTicketCents,
-    idempotencyKey: promotionKey,
   };
 
   try {
     const response = await fetch(`${TICKET_PURCHASE_SERVICE_URL}/purchases`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "Idempotency-Key": promotionKey,
+      },
       body: JSON.stringify(payload),
     });
 
