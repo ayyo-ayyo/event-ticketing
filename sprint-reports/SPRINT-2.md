@@ -19,7 +19,7 @@
 | [Name]      | | |
 | [Name]      | | |
 | [Name]      | | |
-| [Sean]      | k6 tests + Http timeout|  |
+| Jimmy J | implement notification service/worker, health endpoint, worker logs | f4c4aae5070f9245bd36936dce6bab70393ddb41 |
 
 ---
 
