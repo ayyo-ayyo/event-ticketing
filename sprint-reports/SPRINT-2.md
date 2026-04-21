@@ -19,6 +19,7 @@
 | [Name]      | | |
 | [Name]      | | |
 | [Name]      | | |
+| [Sean]      | k6 tests + Http timeout|  |
 
 ---
 
@@ -40,14 +41,15 @@
 
 ### Test 1: Caching Comparison (`k6/sprint-2-cache.js`)
 
-| Metric | Sprint 1 Baseline | Sprint 2 Cached | Change |
-| ------ | ----------------- | --------------- | ------ |
-| p50    | | | |
-| p95    | | | |
-| p99    | | | |
-| RPS    | | | |
+| Metric | Sprint 1 Baseline | Sprint 2 Cached | Change    |
+| ------ | ----------------- | --------------- | ------    |
+| p50    | 3.25 ms           | 1.29 ms         | -1.96 ms  |
+| p95    | 6 ms              | 2.02 ms         | -3.98 ms  |
+| p99    | N/A               | 2.67 ms         | N/A       |
+| RPS    | 28.4349/s         | 128.05059/s     | +99.616/s |
 
-[Explain the improvement. If the numbers did not improve, explain why and what you did to diagnose it.]
+The numbers improved by a good amount. This is because the memory lookup with the implemented cache is a lot quicker than in sprint 1, which used database queries.
+The VUs were also changed between Sprint 1 and Sprint 2, from 20 to 100. Although this added more concurrency, the new system still is more efficient with the the implementation of the cache-based calls compared to the database queries.
 
 ### Test 2: Async Pipeline Burst (`k6/sprint-2-async.js`)
 
