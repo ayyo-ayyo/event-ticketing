@@ -17,7 +17,8 @@
 | Team Member | What They Delivered | Key Commits |
 | ----------- | ------------------- | ----------- |
 | [Name]      | | |
-| [Name]      | | |
+| Mateus M    | switched the databe query tosql folder and added get event by id and now cache pulls data from the data base and not fake data
+| Maycol M    | updated the idempotency key to be set in the headers, and fixed a race condition, now inserts first and then checks using sql unique constraints
 | Sean R      | k6 tests + report, http timeout, fetchEvent() | 6090f7818957393c5e81fc46bbe9210ee397a6c1, 2d98cca208f42ff458623916d08f05f057f3fbb0, 47b3996e0f687a9f6703243230a7b72e3bcc7ce7|
 | Jimmy J | implement notification service/worker, health endpoint, worker logs | f4c4aae5070f9245bd36936dce6bab70393ddb41 |
 
