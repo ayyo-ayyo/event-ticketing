@@ -213,9 +213,23 @@ app.post("/purchases", async (req, res) => {
     }
 
     if (paymentResponse.ok) {
+      // Publish to notification queue so the Notification Worker sends a confirmation email
+      const confirmedPurchase = updatedPurchase.rows[0];
+      const notificationJob = JSON.stringify({
+        purchaseId: confirmedPurchase.id,
+        userId: confirmedPurchase.user_id,
+        eventId: confirmedPurchase.event_id,
+        quantity: confirmedPurchase.quantity,
+        unitTicketCents: confirmedPurchase.unit_ticket_cents,
+      });
+      await redisClient.lPush("notification:queue", notificationJob);
+      console.log(
+        `[ticket-purchase-service] Published notification job for purchaseId=${confirmedPurchase.id}`
+      );
+
       return res.status(201).json({
         message: "Purchase created and payment processed",
-        purchase: updatedPurchase.rows[0],
+        purchase: confirmedPurchase,
         payment: paymentResult,
       });
     } else {
