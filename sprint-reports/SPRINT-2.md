@@ -18,7 +18,7 @@
 | ----------- | ------------------- | ----------- |
 | [Name]      | | |
 | [Name]      | | |
-| [Name]      | | |
+| Sean R      | k6 tests + report, http timeout, fetchEvent() | 6090f7818957393c5e81fc46bbe9210ee397a6c1, 2d98cca208f42ff458623916d08f05f057f3fbb0, 47b3996e0f687a9f6703243230a7b72e3bcc7ce7|
 | Jimmy J | implement notification service/worker, health endpoint, worker logs | f4c4aae5070f9245bd36936dce6bab70393ddb41 |
 
 ---
@@ -56,17 +56,22 @@ The VUs were also changed between Sprint 1 and Sprint 2, from 20 to 100. Althoug
 ```
 | Metric | Sprint 2 Async    |
 | ------ | ----------------- |
-| p50    | .         |
-| p95    | .              |
-| p99    | .            |
-| RPS    | .        |
+| p50    | 13.31 ms          |
+| p95    | 19.1 ms           |
+| p99    | 22.33 ms          |
+| RPS    | 53.0239/s         |
 ```
 
 Worker health during the burst (hit `/health` while k6 is running):
 
 ```json
-[Paste an example health response showing non-zero queue depth]
+    {"status":"healthy",
+    "service":"waitlist-worker",
+    "queueDepth":0,
+    "dlqDepth":0,
+    "lastProcessedAt":null}
 ```
+Although the waitlist-worker is healthy it hasn't been connected to the queue yet because the Async pipeline is not complete right now.
 
 Idempotency check: 
 Using curl to post an entry to the ticket purchasing system:
@@ -83,9 +88,12 @@ $ curl -X POST http://ticket-purchase-service:3002/purchases \
 Response: "message":"Purchase created and payment processed", ... 
 "status":"success","purchaseId":475,"message":"Payment processed"
 
+
 Repeating the same post entry or changing the other values but keeping the same idempotency key should result in a decline due to duplicates. Doing this, the result is:
 
+
 Response" "message":"Duplicate request detected, returning existing purchase"
+
 
 So, we get the same response from sending the same idempotency key, even when changing other values. This is how the implementation of idempotency should be working.
 

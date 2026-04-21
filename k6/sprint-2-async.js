@@ -47,7 +47,7 @@ function addEvent(idempotencyKey){
 export default function () {
   const idempotencyKey = `key-${Math.floor(Math.random() * 500)}`;
   const res = http.post(`http://ticket-purchase-service:3002/purchases`, addEvent(idempotencyKey), {
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "idempotency-Key": idempotencyKey },
   });  
 
   let isDuplicate = false;
@@ -60,8 +60,8 @@ export default function () {
   } catch(e){}
 
   const ok = check(res, {
-    "status is valid": (r) => [200, 201, 402].includes(r.status),
-    "response time < 1s": (r) => r.timings.duration < 1000,
+    "status is 200 or 204": (r) => r.status === 200 || r.status === 204,
+    "response time < 500ms": (r) => r.timings.duration < 500,
   });
 
   duplicateRate.add(isDuplicate);
