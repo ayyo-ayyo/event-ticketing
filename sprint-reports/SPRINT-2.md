@@ -1,8 +1,8 @@
-# Sprint 2 Report — [Team Name]
+# Sprint 2 Report — Group 9
 
 **Sprint:** 2 — Async Pipelines and Caching  
 **Tag:** `sprint-2`  
-**Submitted:** [date, before 04.21 class]
+**Submitted:** 04.21
 
 ---
 
@@ -16,11 +16,11 @@
 
 | Team Member | What They Delivered | Key Commits |
 | ----------- | ------------------- | ----------- |
-| Ayo         | ticket-purchase-service now pushes unfulfillable orders to the waitlist, and adjusts seat # in database based on ticket quantity POST, PUT, and DELETE endpoints for events, POST endpoint for venues      | | 
+| Ayo         | ticket-purchase-service now pushes unfulfillable orders to the waitlist, and adjusts seat # in database based on ticket quantity POST, PUT, and DELETE endpoints for events, POST endpoint for venues      | 75f676c5f196c0d210a54024f46e3ff24030ed90, a70d3f448c04ee001f83c8c77787205cbf2c6637 | 
 | [Name]      | | |
 | [Name]      | | |
 | [Name]      | | |
-| Mateus M    | switched the databe query tosql folder and added get event by id and now cache pulls data from the data base and not fake data
+| Mateus M    | switched the database query tosql folder and added get event by id and now cache pulls data from the data base and not fake data
 | Maycol M    | updated the idempotency key to be set in the headers, and fixed a race condition, now inserts first and then checks using sql unique constraints
 | Sean R      | k6 tests + report, http timeout, fetchEvent() | 6090f7818957393c5e81fc46bbe9210ee397a6c1, 2d98cca208f42ff458623916d08f05f057f3fbb0, 47b3996e0f687a9f6703243230a7b72e3bcc7ce7|
 | Jimmy J | implement notification service/worker, health endpoint, worker logs | f4c4aae5070f9245bd36936dce6bab70393ddb41 |
@@ -29,11 +29,11 @@
 
 ## What Is Working
 
-- [ ] Redis cache in use — repeated reads do not hit the database
-- [ ] Async pipeline works end-to-end (message published → worker consumes → action taken)
-- [ ] At least one write path is idempotent (same request twice produces same result)
-- [ ] Worker logs show pipeline activity in `docker compose logs`
-- [ ] Worker `GET /health` returns queue depth, DLQ depth, and last-job-at
+- [X] Redis cache in use — repeated reads do not hit the database
+- [] Async pipeline works end-to-end (message published → worker consumes → action taken)
+- [X] At least one write path is idempotent (same request twice produces same result)
+- [X] Worker logs show pipeline activity in `docker compose logs`
+- [X] Worker `GET /health` returns queue depth, DLQ depth, and last-job-at
 
 ---
 
