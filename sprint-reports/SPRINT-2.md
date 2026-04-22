@@ -66,13 +66,11 @@ The VUs were also changed between Sprint 1 and Sprint 2, from 20 to 100. Althoug
 Worker health during the burst (hit `/health` while k6 is running):
 
 ```json
-    {"status":"healthy",
-    "service":"waitlist-worker",
-    "queueDepth":0,
-    "dlqDepth":0,
-    "lastProcessedAt":null}
+{"status":"healthy","service":"waitlist-worker","queueDepth":0,"dlqDepth":0,"lastProcessedAt":null}
+{"status":"healthy","service":"waitlist-worker","queueDepth":387,"dlqDepth":0,"lastProcessedAt":"2026-04-22T01:41:05.418Z"}
+{"status":"healthy","service":"waitlist-worker","queueDepth":470,"dlqDepth":0,"lastProcessedAt":"2026-04-22T01:41:18.767Z"}
 ```
-Although the waitlist-worker is healthy it hasn't been connected to the queue yet because the Async pipeline is not complete right now.
+In the health response it is shown that the status of the waitlist worker is healthy. Additionally, the queue depth increases over the duration of the k6 test (dlqDepth is not implemented so stays at 0). Also, there is a the lastProcessedAt, which updates using the real time after processing.
 
 Idempotency check: 
 Using curl to post an entry to the ticket purchasing system:
