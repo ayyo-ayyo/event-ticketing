@@ -57,10 +57,10 @@ The VUs were also changed between Sprint 1 and Sprint 2, from 20 to 100. Althoug
 ```
 | Metric | Sprint 2 Async    |
 | ------ | ----------------- |
-| p50    | 13.31 ms          |
-| p95    | 19.1 ms           |
-| p99    | 22.33 ms          |
-| RPS    | 53.0239/s         |
+| p50    | 7.99  ms          |
+| p95    | 29.89 ms          |
+| p99    | 47.57 ms          |
+| RPS    | 48.967/s          |
 ```
 
 Worker health during the burst (hit `/health` while k6 is running):
