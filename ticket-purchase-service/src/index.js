@@ -77,6 +77,32 @@ async function fetchEvent(eventId){
   }
 }
 
+async function adjustEventSeats(event, eventId, quantity){
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+  console.log(`Adjusting seats for eventId ${eventId} by ${quantity}. Current seats available: ${event.seats_available}`);
+  try {
+          const updateResponse = await fetch(`http://event-catalog-service:3001/events/${eventId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              ...event,
+              seats_available: event.seats_available + quantity,
+            }),
+          });
+          if (!updateResponse.ok) {
+            throw new Error(`Failed to update seats for eventId: ${eventId}`);
+          }
+        } catch (updateErr) {
+          console.error("Failed to update seats in Event Catalog Service:", updateErr.message);
+          return res.status(502).json({
+            error: "Event Catalog Service unreachable",
+            purchase: result.rows[0],
+          });
+        }
+        
+}
+
 app.get("/", (req, res) => {
   res.json({
     service: "ticket-purchase-service",
@@ -155,41 +181,68 @@ app.post("/purchases", async (req, res) => {
   }
 
   try {
-    let result;
+  let result;
 
-    try {
-      result = await pool.query(
-        `INSERT INTO purchases
-         (user_id, event_id, quantity, unit_ticket_cents, reservation_status, payment_status, idempotency_key)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
-         RETURNING *`,
-        [
-          userId,
-          eventId,
-          quantity,
-          unitTicketCents,
-          "reserved",
-          "pending",
-          idempotencyKey,
-        ]
+  try {
+    result = await pool.query(
+      `INSERT INTO purchases
+       (user_id, event_id, quantity, unit_ticket_cents, reservation_status, payment_status, idempotency_key)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING *`,
+      [
+        userId,
+        eventId,
+        quantity,
+        unitTicketCents,
+        "reserved",
+        "pending",
+        idempotencyKey,
+      ]
+    );
+  } catch (insertErr) {
+    if (insertErr.code === POSTGRES_UNIQUE_VIOLATION) {
+      const existing = await pool.query(
+        "SELECT * FROM purchases WHERE idempotency_key = $1",
+        [idempotencyKey]
       );
-    } catch (insertErr) {
-      if (insertErr.code === POSTGRES_UNIQUE_VIOLATION) {
-        const existing = await pool.query(
-          "SELECT * FROM purchases WHERE idempotency_key = $1",
-          [idempotencyKey]
-        );
 
-        if (existing.rows.length > 0) {
-          return res.status(200).json({
-            message: "Duplicate request detected, returning existing purchase",
-            purchase: existing.rows[0],
-          });
-        }
+      if (existing.rows.length > 0) {
+        return res.status(200).json({
+          message: "Duplicate request detected, returning existing purchase",
+          purchase: existing.rows[0],
+        });
       }
-
-      throw insertErr;
     }
+
+    throw insertErr;
+  }
+
+  const event = (await fetchEvent(eventId))?.event || null;
+  if (!event) {
+    return res.status(404).json({
+      error: "Event not found for eventId: " + eventId,
+    });
+  }
+
+  if (event.seats_available < quantity) {
+    const waitlistJob = {
+      userId: result.rows[0].user_id,
+      eventId: result.rows[0].event_id,
+      quantity: result.rows[0].quantity,
+      unitTicketCents: result.rows[0].unit_ticket_cents,
+    };
+
+    await redisClient.lPush("waitlist", JSON.stringify(waitlistJob));
+
+    return res.status(200).json({
+      message: "Purchase created but added to waiting list due to insufficient seats",
+      purchase: result.rows[0],
+      event,
+    });
+  }
+
+  await adjustEventSeats(event, eventId, -quantity);
+
 
     const purchase = result.rows[0];
 
@@ -206,6 +259,7 @@ app.post("/purchases", async (req, res) => {
       paymentResult = await paymentResponse.json();
     } catch (paymentErr) {
       console.error("Failed to reach Payment Service:", paymentErr.message);
+      await adjustEventSeats(event, eventId, quantity); // Rollback seat reservation
       return res.status(502).json({
         error: "Payment Service unreachable",
         purchase,
@@ -254,6 +308,7 @@ app.post("/purchases", async (req, res) => {
         payment: paymentResult,
       });
     } else {
+      await adjustEventSeats(event, eventId, quantity); // Rollback seat reservation on payment failure
       return res.status(402).json({
         message: "Purchase created but payment failed",
         purchase: updatedPurchase.rows[0],

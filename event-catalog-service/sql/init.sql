@@ -10,7 +10,8 @@ CREATE TABLE IF NOT EXISTS events (
   venue_id INTEGER NOT NULL REFERENCES venues(id),
   title TEXT NOT NULL,
   event_date TIMESTAMPTZ NOT NULL,
-  base_price_cents INTEGER NOT NULL DEFAULT 0 CHECK (base_price_cents >= 0)
+  base_price_cents INTEGER NOT NULL DEFAULT 0 CHECK (base_price_cents >= 0),
+  seats_available INTEGER NOT NULL DEFAULT 0 CHECK (seats_available >= 0)
 );
 
 CREATE TABLE IF NOT EXISTS seat_inventory (
