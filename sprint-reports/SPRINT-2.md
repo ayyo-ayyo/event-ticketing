@@ -18,7 +18,7 @@ We added a cache to the event catalog service/database. We added the wait list q
 | ----------- | ------------------- | ----------- |
 | Ayo         | ticket-purchase-service now pushes unfulfillable orders to the waitlist, and adjusts seat # in database based on ticket quantity POST, PUT, and DELETE endpoints for events, POST endpoint for venues      | 75f676c5f196c0d210a54024f46e3ff24030ed90, a70d3f448c04ee001f83c8c77787205cbf2c6637 | 
 | Lucky       | payment service is now idempotent |21128c723fdd4ff6f14c30ea7a4b78ce58c5f773 |
-| [Name]      | | |
+| Brian N     | implemented waitlist worker that promotes next user in queue when a ticket is released, poison pill handling with DLQ, health endpoint | 547d12ce2ed61a3c4820172de4f59b9c3881da55, f6522a4eeed3fc5e685b2af715c2ecb91ba38ca7 |
 | [Name]      | | |
 | Mateus M    | switched the database query tosql folder and added get event by id and now cache pulls data from the data base and not fake data
 | Maycol M    | updated the idempotency key to be set in the headers, and fixed a race condition, now inserts first and then checks using sql unique constraints
