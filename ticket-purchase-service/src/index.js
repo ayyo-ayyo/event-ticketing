@@ -1,4 +1,3 @@
-const e = require("express");
 const express = require("express");
 const { Pool } = require("pg");
 const { createClient } = require("redis");
@@ -190,7 +189,13 @@ app.post("/purchases", async (req, res) => {
     //if there is no seats available, push the purchase onto waiting list and return response to user
       if(event.seats_available < quantity){
         //push purchase object onto waiting queue in Redis
-        await redisClient.lPush("waitlist", JSON.stringify(result.rows[0]));
+        await redisClient.lPush("waitlist", JSON.stringify({
+          userId: result.rows[0].user_id,
+          eventId: result.rows[0].event_id,
+          quantity: result.rows[0].quantity,
+          unitTicketCents: result.rows[0].unit_ticket_cents,
+          purchaseId: result.rows[0].id
+        }));
         return res.status(200).json({
           message: "Purchase created but added to waiting list due to insufficient seats",
           purchase: result.rows[0],
