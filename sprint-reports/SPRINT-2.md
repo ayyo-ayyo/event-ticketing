@@ -8,7 +8,7 @@
 
 ## What We Built
 
-[What cache did you add? What queue and worker are running? What does the async pipeline do?]
+We added a cache to the event catalog service/database. We added the wait list queue and wait list worker, which is our async pipeline that promotes previously invalid purchases when another user has a cancelled or failed purchase. 
 
 ---
 
@@ -38,7 +38,7 @@
 ---
 
 ## What Is Not Working / Cut
-
+Nothing that we built isn't working, but we haven't tested the async pipeline yet. 
 ---
 
 ## k6 Results
@@ -104,3 +104,4 @@ So, we get the same response from sending the same idempotency key, even when ch
 ---
 
 ## Blockers and Lessons Learned
+Some of us got started on our tasks somewhat late, and we underestimated how long they would take, so from here on out we definitely want to start our tasks sooner. 
