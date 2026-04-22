@@ -9,6 +9,7 @@ const PORT = process.env.PORT || 3002;
 const DATABASE_URL = process.env.DATABASE_URL;
 const REDIS_URL = process.env.REDIS_URL;
 const PAYMENT_SERVICE_URL = process.env.PAYMENT_SERVICE_URL;
+const POSTGRES_UNIQUE_VIOLATION = "23505";
 
 const pool = new Pool({
   connectionString: DATABASE_URL,
@@ -138,35 +139,31 @@ app.get("/health", async (req, res) => {
 });
 
 app.post("/purchases", async (req, res) => {
+  const idempotencyKey = req.header("Idempotency-Key")?.trim();
   const {
     userId,
     eventId,
     quantity,
     unitTicketCents,
-    idempotencyKey,
   } = req.body;
 
-  if (!userId || !eventId || !quantity || !unitTicketCents || !idempotencyKey) {
+  if (!idempotencyKey) {
     return res.status(400).json({
-      error:
-        "userId, eventId, quantity, unitTicketCents, and idempotencyKey are required",
+      error: "Idempotency-Key header is required",
+    });
+  }
+
+  if (!userId || !eventId || !quantity || !unitTicketCents) {
+    return res.status(400).json({
+      error: "userId, eventId, quantity, and unitTicketCents are required",
     });
   }
 
   try {
-    const existing = await pool.query(
-      "SELECT * FROM purchases WHERE idempotency_key = $1",
-      [idempotencyKey]
-    );
+  let result;
 
-    if (existing.rows.length > 0) {
-      return res.status(200).json({
-        message: "Duplicate request detected, returning existing purchase",
-        purchase: existing.rows[0],
-      });
-    }
-
-    const result = await pool.query(
+  try {
+    result = await pool.query(
       `INSERT INTO purchases
        (user_id, event_id, quantity, unit_ticket_cents, reservation_status, payment_status, idempotency_key)
        VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -181,29 +178,50 @@ app.post("/purchases", async (req, res) => {
         idempotencyKey,
       ]
     );
-    const event = (await fetchEvent(eventId))?.event || null;
-    if (!event) {
-      return res.status(404).json({ error: "Event not found for eventId: " + eventId });
-    }
+  } catch (insertErr) {
+    if (insertErr.code === POSTGRES_UNIQUE_VIOLATION) {
+      const existing = await pool.query(
+        "SELECT * FROM purchases WHERE idempotency_key = $1",
+        [idempotencyKey]
+      );
 
-    //if there is no seats available, push the purchase onto waiting list and return response to user
-      if(event.seats_available < quantity){
-        //push purchase object onto waiting queue in Redis
-        await redisClient.lPush("waitlist", JSON.stringify({
-          userId: result.rows[0].user_id,
-          eventId: result.rows[0].event_id,
-          quantity: result.rows[0].quantity,
-          unitTicketCents: result.rows[0].unit_ticket_cents,
-          purchaseId: result.rows[0].id
-        }));
+      if (existing.rows.length > 0) {
         return res.status(200).json({
-          message: "Purchase created but added to waiting list due to insufficient seats",
-          purchase: result.rows[0],
-          event,
+          message: "Duplicate request detected, returning existing purchase",
+          purchase: existing.rows[0],
         });
       }
-      //otherwise, decrement the available seats in the event catalog service using the put route and proceed with payment
-      await adjustEventSeats(event, eventId, -quantity);
+    }
+
+    throw insertErr;
+  }
+
+  const event = (await fetchEvent(eventId))?.event || null;
+  if (!event) {
+    return res.status(404).json({
+      error: "Event not found for eventId: " + eventId,
+    });
+  }
+
+  if (event.seats_available < quantity) {
+    const waitlistJob = {
+      userId: result.rows[0].user_id,
+      eventId: result.rows[0].event_id,
+      quantity: result.rows[0].quantity,
+      unitTicketCents: result.rows[0].unit_ticket_cents,
+    };
+
+    await redisClient.lPush("waitlist", JSON.stringify(waitlistJob));
+
+    return res.status(200).json({
+      message: "Purchase created but added to waiting list due to insufficient seats",
+      purchase: result.rows[0],
+      event,
+    });
+  }
+
+  await adjustEventSeats(event, eventId, -quantity);
+
 
     const purchase = result.rows[0];
 
@@ -249,9 +267,23 @@ app.post("/purchases", async (req, res) => {
     }
 
     if (paymentResponse.ok) {
+      // Publish to notification queue so the Notification Worker sends a confirmation email
+      const confirmedPurchase = updatedPurchase.rows[0];
+      const notificationJob = JSON.stringify({
+        purchaseId: confirmedPurchase.id,
+        userId: confirmedPurchase.user_id,
+        eventId: confirmedPurchase.event_id,
+        quantity: confirmedPurchase.quantity,
+        unitTicketCents: confirmedPurchase.unit_ticket_cents,
+      });
+      await redisClient.lPush("notification:queue", notificationJob);
+      console.log(
+        `[ticket-purchase-service] Published notification job for purchaseId=${confirmedPurchase.id}`
+      );
+
       return res.status(201).json({
         message: "Purchase created and payment processed",
-        purchase: updatedPurchase.rows[0],
+        purchase: confirmedPurchase,
         payment: paymentResult,
       });
     } else {
