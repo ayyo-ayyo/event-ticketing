@@ -67,6 +67,30 @@ app.post("/payments", async (req, res) => {
   // });
 });
 
+//Endpoint for refund-service to make refund
+app.post('/payments/refunds', async (req, res) => {
+  const { purchaseId } = req.body;
+
+  if (!purchaseId) {
+    return res.status(400).json({ status: 'failed', message: 'purchaseId is required' });
+  }
+
+  const existing = await redisClient.get(`refund:${purchaseId}`);
+  if (existing) {
+    return res.status(200).json(JSON.parse(existing));
+  }
+
+  const success = Math.random() > 0.1;
+
+  const result = success
+    ? { status: 'success', purchaseId, message: 'Refund processed' }
+    : { status: 'failed', purchaseId, message: 'Refund declined' };
+
+  await redisClient.set(`refund:${purchaseId}`, JSON.stringify(result));
+
+  return res.status(success ? 200 : 402).json(result);
+})
+
 async function startServer() {
   await redisClient.connect();
 

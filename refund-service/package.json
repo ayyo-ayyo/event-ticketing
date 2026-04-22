@@ -1,0 +1,14 @@
+{
+  "name": "refund-service",
+  "version": "1.0.0", 
+  "description": "Handles refund requests", 
+  "main": "src/index.js", 
+  "scripts": {
+    "start": "node src/index.js"
+  }, 
+  "dependencies": {
+    "express": "^4.21.2",
+    "pg": "^8.13.1",
+    "redis": "^4.7.0"
+  }
+}
