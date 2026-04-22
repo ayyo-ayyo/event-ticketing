@@ -1,7 +1,7 @@
 {
-  "name": "payment-service",
+  "name": "notification-service",
   "version": "1.0.0",
-  "description": "COMPSCI 426 Payment Service",
+  "description": "COMPSCI 426 Notification Service + Worker",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js"

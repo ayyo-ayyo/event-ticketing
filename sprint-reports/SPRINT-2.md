@@ -1,14 +1,14 @@
-# Sprint 2 Report — [Team Name]
+# Sprint 2 Report — Group 9
 
 **Sprint:** 2 — Async Pipelines and Caching  
 **Tag:** `sprint-2`  
-**Submitted:** [date, before 04.21 class]
+**Submitted:** 04.21
 
 ---
 
 ## What We Built
 
-[What cache did you add? What queue and worker are running? What does the async pipeline do?]
+We added a cache to the event catalog service/database. We added the wait list queue and wait list worker, which is our async pipeline that promotes previously invalid purchases when another user has a cancelled or failed purchase. 
 
 ---
 
@@ -16,53 +16,90 @@
 
 | Team Member | What They Delivered | Key Commits |
 | ----------- | ------------------- | ----------- |
-| [Name]      | | |
-| [Name]      | | |
-| [Name]      | | |
+| Ayo         | ticket-purchase-service now pushes unfulfillable orders to the waitlist, and adjusts seat # in database based on ticket quantity POST, PUT, and DELETE endpoints for events, POST endpoint for venues      | 75f676c5f196c0d210a54024f46e3ff24030ed90, a70d3f448c04ee001f83c8c77787205cbf2c6637 | 
+| Lucky       | payment service is now idempotent |21128c723fdd4ff6f14c30ea7a4b78ce58c5f773 |
+| Brian N     | implemented waitlist worker that promotes next user in queue when a ticket is released, poison pill handling with DLQ, health endpoint | 547d12ce2ed61a3c4820172de4f59b9c3881da55, f6522a4eeed3fc5e685b2af715c2ecb91ba38ca7 |
+| Derek B      | Implemented the refund service that looks into the ticket-purchase-service to validate if a purchase was made, then looks into the payment service to refund the payment, and use redis to release the seats that were reserved | 91993e9, eac4b28 |
+| Mateus M    | switched the database query tosql folder and added get event by id and now cache pulls data from the data base and not fake data
+| Maycol M    | updated the idempotency key to be set in the headers, and fixed a race condition, now inserts first and then checks using sql unique constraints
+| Sean R      | k6 tests + report, http timeout, fetchEvent() | 6090f7818957393c5e81fc46bbe9210ee397a6c1, 2d98cca208f42ff458623916d08f05f057f3fbb0, 47b3996e0f687a9f6703243230a7b72e3bcc7ce7|
+| Jimmy J | implement notification service/worker, health endpoint, worker logs | f4c4aae5070f9245bd36936dce6bab70393ddb41 |
 
 ---
 
 ## What Is Working
 
-- [ ] Redis cache in use — repeated reads do not hit the database
-- [ ] Async pipeline works end-to-end (message published → worker consumes → action taken)
-- [ ] At least one write path is idempotent (same request twice produces same result)
-- [ ] Worker logs show pipeline activity in `docker compose logs`
-- [ ] Worker `GET /health` returns queue depth, DLQ depth, and last-job-at
+- [X] Redis cache in use — repeated reads do not hit the database
+- [] Async pipeline works end-to-end (message published → worker consumes → action taken)
+- [X] At least one write path is idempotent (same request twice produces same result)
+- [X] Worker logs show pipeline activity in `docker compose logs`
+- [X] Worker `GET /health` returns queue depth, DLQ depth, and last-job-at
 
 ---
 
 ## What Is Not Working / Cut
-
+Nothing that we built isn't working, but we haven't tested the async pipeline yet. 
 ---
 
 ## k6 Results
 
 ### Test 1: Caching Comparison (`k6/sprint-2-cache.js`)
 
-| Metric | Sprint 1 Baseline | Sprint 2 Cached | Change |
-| ------ | ----------------- | --------------- | ------ |
-| p50    | | | |
-| p95    | | | |
-| p99    | | | |
-| RPS    | | | |
+| Metric | Sprint 1 Baseline | Sprint 2 Cached | Change    |
+| ------ | ----------------- | --------------- | ------    |
+| p50    | 3.25 ms           | 1.29 ms         | -1.96 ms  |
+| p95    | 6 ms              | 2.02 ms         | -3.98 ms  |
+| p99    | N/A               | 2.67 ms         | N/A       |
+| RPS    | 28.4349/s         | 128.05059/s     | +99.616/s |
 
-[Explain the improvement. If the numbers did not improve, explain why and what you did to diagnose it.]
+The numbers improved by a good amount. This is because the memory lookup with the implemented cache is a lot quicker than in sprint 1, which used database queries.
+The VUs were also changed between Sprint 1 and Sprint 2, from 20 to 100. Although this added more concurrency, the new system still is more efficient with the the implementation of the cache-based calls compared to the database queries.
 
 ### Test 2: Async Pipeline Burst (`k6/sprint-2-async.js`)
 
 ```
-[Paste k6 summary output here]
+| Metric | Sprint 2 Async    |
+| ------ | ----------------- |
+| p50    | 7.99  ms          |
+| p95    | 29.89 ms          |
+| p99    | 47.57 ms          |
+| RPS    | 48.967/s          |
 ```
 
 Worker health during the burst (hit `/health` while k6 is running):
 
 ```json
-[Paste an example health response showing non-zero queue depth]
+{"status":"healthy","service":"waitlist-worker","queueDepth":0,"dlqDepth":0,"lastProcessedAt":null}
+{"status":"healthy","service":"waitlist-worker","queueDepth":387,"dlqDepth":0,"lastProcessedAt":"2026-04-22T01:41:05.418Z"}
+{"status":"healthy","service":"waitlist-worker","queueDepth":470,"dlqDepth":0,"lastProcessedAt":"2026-04-22T01:41:18.767Z"}
 ```
+In the health response it is shown that the status of the waitlist worker is healthy. Additionally, the queue depth increases over the duration of the k6 test (dlqDepth is not implemented so stays at 0). Also, there is a the lastProcessedAt, which updates using the real time after processing.
 
-Idempotency check: [Describe what you sent and what happened when you sent the same idempotency key twice.]
+Idempotency check: 
+Using curl to post an entry to the ticket purchasing system:
+$ curl -X POST http://ticket-purchase-service:3002/purchases \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": 1,
+    "eventId": 2,
+    "quantity": 1,
+    "unitTicketCents": 5000,
+    "idempotencyKey": "key1"
+  }'
+
+Response: "message":"Purchase created and payment processed", ... 
+"status":"success","purchaseId":475,"message":"Payment processed"
+
+
+Repeating the same post entry or changing the other values but keeping the same idempotency key should result in a decline due to duplicates. Doing this, the result is:
+
+
+Response" "message":"Duplicate request detected, returning existing purchase"
+
+
+So, we get the same response from sending the same idempotency key, even when changing other values. This is how the implementation of idempotency should be working.
 
 ---
 
 ## Blockers and Lessons Learned
+Some of us got started on our tasks somewhat late, and we underestimated how long they would take, so from here on out we definitely want to start our tasks sooner. 

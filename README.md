@@ -5,10 +5,170 @@
 **System:** Event Ticketing
 **Repository:** GitHub URL — public fork of https://github.com/ayyo-ayyo/event-ticketing.git
 
----
 
 ## Team and Service Ownership
 
+
+### PUT /events/:id
+
+```
+PUT /events/:id
+
+  Updates an event by id. Allows partial updates to event fields.
+
+  Body (JSON):
+    title: string (optional)
+    event_date: string (optional, ISO format)
+    base_price_cents: integer (optional)
+    venue_id: integer (optional)
+    seats_available: integer (optional)
+
+  Responses:
+    200  Event updated and returned
+    404  Event not found
+    500  Failed to update event
+```
+
+**Example request:**
+
+```bash
+curl -X PUT http://localhost:3001/events/1 \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Updated Concert","seats_available":200}'
+```
+
+**Example response (200):**
+
+```json
+{
+  "source": "database",
+  "event": {
+    "id": "1",
+    "title": "Updated Concert",
+    "venue": "Downtown Arena",
+    "date": "2026-10-31T20:00:00Z",
+    "currency": "USD",
+    "basePriceCents": 6500,
+    "seats_available": 200
+  }
+}
+```
+
+---
+
+### DELETE /events/:id
+
+```
+DELETE /events/:id
+
+  Deletes an event by id.
+
+  Responses:
+    204  Event deleted
+    404  Event not found
+    500  Failed to delete event
+```
+
+**Example request:**
+
+```bash
+curl -X DELETE http://localhost:3001/events/1
+```
+
+**Example response (204):**
+
+No content (empty response)
+
+---
+
+### POST /events
+
+```
+POST /events
+
+  Creates a new event. Requires title, event_date, and venue_id.
+
+  Body (JSON):
+    title: string
+    event_date: string (ISO format)
+    base_price_cents: integer (optional, default 0)
+    venue_id: integer
+
+  Responses:
+    201  Event created
+    400  Invalid payload
+    500  Failed to create event
+```
+
+**Example request:**
+
+```bash
+curl -X POST http://localhost:3001/events \
+  -H "Content-Type: application/json" \
+  -d '{"title":"New Event","event_date":"2026-12-01T19:00:00Z","venue_id":1,"base_price_cents":5000}'
+```
+
+**Example response (201):**
+
+```json
+{
+  "source": "database",
+  "event": {
+    "id": "2",
+    "title": "New Event",
+    "venue": "Downtown Arena",
+    "date": "2026-12-01T19:00:00Z",
+    "currency": "USD",
+    "basePriceCents": 5000,
+    "seats_available": 100
+  }
+}
+```
+
+---
+
+### POST /venues
+
+```
+POST /venues
+
+  Creates a new venue.
+
+  Body (JSON):
+    name: string
+    city: string
+    capacity: integer
+
+  Responses:
+    201  Venue created
+    400  Invalid payload
+    500  Failed to create venue
+```
+
+**Example request:**
+
+```bash
+curl -X POST http://localhost:3001/venues \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Downtown Arena","city":"Metropolis","capacity":1000}'
+```
+
+**Example response (201):**
+
+```json
+{
+  "venue": {
+    "id": 1,
+    "name": "Downtown Arena",
+    "city": "Metropolis",
+    "capacity": 1000
+  }
+}
+```
+
+---
+
+```
 | Team Member | Services / Components Owned                            |
 | ----------- | ------------------------------------------------------ |
 | [Name]      | [e.g. `order-service/`, `order-service/db/schema.sql`] |
