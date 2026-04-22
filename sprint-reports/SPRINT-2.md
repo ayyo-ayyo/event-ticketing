@@ -17,7 +17,7 @@ We added a cache to the event catalog service/database. We added the wait list q
 | Team Member | What They Delivered | Key Commits |
 | ----------- | ------------------- | ----------- |
 | Ayo         | ticket-purchase-service now pushes unfulfillable orders to the waitlist, and adjusts seat # in database based on ticket quantity POST, PUT, and DELETE endpoints for events, POST endpoint for venues      | 75f676c5f196c0d210a54024f46e3ff24030ed90, a70d3f448c04ee001f83c8c77787205cbf2c6637 | 
-| [Name]      | | |
+| Lucky       | payment service is now idempotent |21128c723fdd4ff6f14c30ea7a4b78ce58c5f773 |
 | [Name]      | | |
 | [Name]      | | |
 | Mateus M    | switched the database query tosql folder and added get event by id and now cache pulls data from the data base and not fake data
