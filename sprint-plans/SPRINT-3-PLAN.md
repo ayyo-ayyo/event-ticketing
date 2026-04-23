@@ -24,37 +24,42 @@
 
 ## Tasks
 
-- [ ]
-
-k6 poison pill tests
-
-analytics worker +analytics DB + dlq
-
-fraud detection worker + fraud detection worker DB + dlq
-
-Frontend 
-
-- event catalog
-
-- purchase screen
-
-- payment screen
-
-Graceful failures
-
-
-
 ### [Maycol]
 
 - [ ] dlq for ticket purchase service
 
-### [Name]
+### [Ayo]
 
-- [ ] ...
+- [ ] analytics worker +analytics DB + dlq
 
-### [Name]
+### [Sean]
 
-- [ ] ...
+- [ ] event catalog frontend
+
+### [Brian]
+
+- [ ] purchase screen
+
+### [Lucky]
+
+- [ ] payment screen
+
+### [Derek]
+
+- [ ] k6 poison pill tests
+
+### [Jimmy]
+
+- [ ] fraud detection worker + fraud detection worker DB + dlq
+
+### [Sean]
+
+- [ ] event catalog frontend
+
+### [Mateus]
+
+- [ ] Graceful failures
+
 
 ---
 
