@@ -24,9 +24,29 @@
 
 ## Tasks
 
-### [Name]
+- [ ]
 
-- [ ] ...
+k6 poison pill tests
+
+analytics worker +analytics DB + dlq
+
+fraud detection worker + fraud detection worker DB + dlq
+
+Frontend 
+
+- event catalog
+
+- purchase screen
+
+- payment screen
+
+Graceful failures
+
+
+
+### [Maycol]
+
+- [ ] dlq for ticket purchase service
 
 ### [Name]
 
