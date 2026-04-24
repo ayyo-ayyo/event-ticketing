@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Venues and Events</title>
+</head>
+<body>
+<pre>These are Events</pre>
+<button onclick="eventsFunc()">Refresh</button>
+<br>
+<table border="1">
+    <thead>
+        <tr>
+        <th>Event Id</th>
+        <th>Title</th>
+        <th>Venue</th>
+        <th>Date</th>
+        <th>Currency</th>
+        <th>Price</th>
+        <th>Seats Available</th>
+        </tr>
+    </thead>
+    <tbody id="events-body">
+    </tbody>
+</table>
+</body>
+<script>
+async function eventsFunc(){
+    const events = await fetch('http://localhost:3001/events');
+    const data = await events.json();
+    const eventsData = data.events;
+
+    const tableBody = document.getElementById('events-body');
+    tableBody.innerHTML = '';
+
+    
+
+    eventsData.forEach(event => {
+        // let formattedTime = new Date(event.updatedAt).toLocaleString();
+        // if(formattedTime === "Invalid Date"){
+        //     formattedTime = "n/a"
+        // }
+        //const statusClass = (.status || '').toLowerCase();
+        const row = `
+            <tr>
+                <td>${event.id}</td>
+                <td>${event.title}</td>
+                <td>${event.venue}</td>
+                <td>${event.date}</td>
+                <td>${event.currency}</td>
+                <td>${event.basePriceCents}</td>
+                <td>${event.seats_available}</td>
+            </tr>
+        `;
+    tableBody.innerHTML += row;
+  });
+}
+setInterval(eventsFunc, 3000);
+eventsFunc();
+</script>
+</html>
