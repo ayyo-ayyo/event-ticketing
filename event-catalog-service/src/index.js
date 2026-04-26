@@ -175,7 +175,12 @@ app.get('/events/:id', async (req, res) => {
     };
 
     await redis.set(cacheKey, JSON.stringify(event), { EX: 60 });
-
+    //push to analytics queue so the Analytics Worker can update read metrics
+    const analyticsJob = JSON.stringify({
+      eventId: event.id,
+      read: 1,
+    });
+    await redis.lPush("analytics:queue", analyticsJob);
     return res.status(200).json({ source: 'database', event });
   } catch (error) {
     return res.status(500).json({ error: 'failed_to_fetch_event', message: error.message });

@@ -301,6 +301,16 @@ app.post("/purchases", async (req, res) => {
       console.log(
         `[ticket-purchase-service] Published notification job for purchaseId=${confirmedPurchase.id}`
       );
+      //Publish to analytics queue so the Analytics Worker can update sales metrics
+      const analyticsJob = JSON.stringify({
+        eventId: confirmedPurchase.event_id,
+        quantity: confirmedPurchase.quantity,
+        unitTicketCents: confirmedPurchase.unit_ticket_cents,
+      });
+      await redisClient.lPush("analytics:queue", analyticsJob);
+      console.log(
+        `[ticket-purchase-service] Published analytics job for purchaseId=${confirmedPurchase.id}`
+      );
 
       return res.status(201).json({
         message: "Purchase created and payment processed",
