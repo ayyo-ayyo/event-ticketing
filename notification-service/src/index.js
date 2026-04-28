@@ -55,7 +55,11 @@ async function processJob(raw) {
       raw,
       timestamp: new Date().toISOString(),
     }));
-    await publisher.lPush(DLQ_KEY, raw);
+    try {
+      await publisher.lPush(DLQ_KEY, raw);
+    } catch (pushErr) {
+      console.error("[notification-service] Failed to push malformed message to DLQ:", pushErr.message);
+    }
     return;
   }
 
@@ -68,7 +72,11 @@ async function processJob(raw) {
       job,
       timestamp: new Date().toISOString(),
     }));
-    await publisher.lPush(DLQ_KEY, raw);
+    try {
+      await publisher.lPush(DLQ_KEY, raw);
+    } catch (pushErr) {
+      console.error("[notification-service] Failed to push invalid job to DLQ:", pushErr.message);
+    }
     return;
   }
 
@@ -122,7 +130,11 @@ async function processJob(raw) {
     purchaseId: job.purchaseId,
     timestamp: new Date().toISOString(),
   }));
-  await publisher.lPush(DLQ_KEY, raw);
+  try {
+    await publisher.lPush(DLQ_KEY, raw);
+  } catch (pushErr) {
+    console.error("[notification-service] Failed to push exhausted job to DLQ:", pushErr.message);
+  }
 }
 
 async function runWorker() {
