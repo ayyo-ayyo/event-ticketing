@@ -67,7 +67,11 @@ async function processMessage(raw) {
       "[waitlist-worker] Poison pill, invalid JSON, moving to DLQ:",
       raw
     );
-    await redisClient.lPush(DLQ, raw);
+    try {
+      await redisClient.lPush(DLQ, raw);
+    } catch (pushErr) {
+      console.error("[waitlist-worker] Failed to push to DLQ:", pushErr.message);
+    }
     return;
   }
 
@@ -77,7 +81,11 @@ async function processMessage(raw) {
       "[waitlist-worker] Poison pill, missing required fields, moving to DLQ:",
       JSON.stringify(purchase)
     );
-    await redisClient.lPush(DLQ, raw);
+    try {
+      await redisClient.lPush(DLQ, raw);
+    } catch (pushErr) {
+      console.error("[waitlist-worker] Failed to push to DLQ:", pushErr.message);
+    }
     return;
   }
 
@@ -96,6 +104,8 @@ async function processMessage(raw) {
   };
 
   try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
     const response = await fetch(`${TICKET_PURCHASE_SERVICE_URL}/purchases`, {
       method: "POST",
       headers: {
@@ -103,7 +113,9 @@ async function processMessage(raw) {
         "Idempotency-Key": promotionKey,
       },
       body: JSON.stringify(payload),
+      signal: controller.signal,
     });
+    clearTimeout(timeout);
 
     const result = await response.json();
 
@@ -117,14 +129,28 @@ async function processMessage(raw) {
       console.error(
         `[waitlist-worker] Promotion failed for user ${purchase.userId} (status ${response.status}): ${result.error || result.message} — moving to DLQ`
       );
-      await redisClient.lPush(DLQ, raw);
+      try {
+        await redisClient.lPush(DLQ, raw);
+      } catch (pushErr) {
+        console.error("[waitlist-worker] Failed to push to DLQ:", pushErr.message);
+      }
     }
   } catch (err) {
     // Ticket Purchase Service unreachable, put entry back at the tail so the next attempt can try again
     console.error(
       `[waitlist-worker] Could not reach Ticket Purchase Service: ${err.message} — re-queuing entry`
     );
-    await redisClient.rPush(WAITLIST_QUEUE, raw);
+    try {
+      await redisClient.rPush(WAITLIST_QUEUE, raw);
+    } catch (pushErr) {
+      console.error("[waitlist-worker] Failed to re-queue entry:", pushErr.message);
+      // If re-queueing fails, try pushing to DLQ to avoid losing the message
+      try {
+        await redisClient.lPush(DLQ, raw);
+      } catch (dlqErr) {
+        console.error("[waitlist-worker] Failed to push to DLQ after re-queue failure:", dlqErr.message);
+      }
+    }
   }
 }
 

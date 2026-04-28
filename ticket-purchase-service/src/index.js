@@ -275,11 +275,15 @@ app.post("/purchases", async (req, res) => {
     let paymentResult;
     let paymentResponse;
     try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
       paymentResponse = await fetch(`${PAYMENT_SERVICE_URL}/payments`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ purchaseId: purchase.id }),
+        signal: controller.signal,
       });
+      clearTimeout(timeout);
 
       paymentResult = await paymentResponse.json();
     } catch (paymentErr) {
