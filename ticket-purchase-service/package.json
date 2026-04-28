@@ -4,7 +4,8 @@
   "description": "COMPSCI 426 Ticket Purchase Service",
   "main": "src/index.js",
   "scripts": {
-    "start": "node src/index.js"
+    "start": "node src/index.js",
+    "test": "node --test"
   },
   "dependencies": {
     "express": "^4.21.2",
