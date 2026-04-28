@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Purchase Tickets</title>
+  <style>
+    /* -- Base — matches Sean's catalog palette -- */
+    body {
+      font-family: 'Trebuchet MS', Trebuchet, sans-serif;
+      background-color: powderblue;
+      margin: 0;
+      padding: 0 0 60px;
+    }
+
+    h1 {
+      font-family: 'Trebuchet MS', Trebuchet, sans-serif;
+      text-align: center;
+      background-color: #FF765C;
+      color: #ffffff;
+      padding: 10px;
+      margin: 0 0 0;
+    }
+
+    h2 {
+      font-family: 'Trebuchet MS', Trebuchet, sans-serif;
+      text-align: center;
+      background-color: #FF765C;
+      color: #ffffff;
+      padding: 10px;
+      margin: 0;
+    }
+
+    h3 {
+      font-family: 'Trebuchet MS', Trebuchet, sans-serif;
+      text-align: center;
+      background-color: #FF765C;
+      color: white;
+      padding: 10px;
+      margin: 0;
+    }
+
+    /* -- Breadcrumb -- */
+    #breadcrumb {
+      padding: 10px 20px;
+      font-size: 13px;
+    }
+    #breadcrumb a {
+      color: #333;
+      text-decoration: underline;
+      cursor: pointer;
+    }
+
+    /* -- Layout container -- */
+    #container {
+      max-width: 700px;
+      margin: 0 auto;
+      padding: 0 16px;
+    }
+
+    /* -- Card / white box -- */
+    .card {
+      background-color: #ffffff;
+      border: 1px solid #aaa;
+      margin-top: 18px;
+    }
+
+    .card-body {
+      padding: 16px 20px;
+    }
+
+    /* -- Tables (matching Sean's style) -- */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: 'Trebuchet MS', Trebuchet, sans-serif;
+      text-align: center;
+      background-color: #ffffff;
+    }
+    th {
+      background-color: #f0f0f0;
+      padding: 8px 10px;
+      border: 1px solid #ccc;
+    }
+    td {
+      padding: 8px 10px;
+      border: 1px solid #ccc;
+    }
+
+    /* -- Buttons -- */
+    button {
+      font-family: 'Trebuchet MS', Trebuchet, sans-serif;
+      background-color: rgb(255, 255, 139);
+      border: 1px solid #aaa;
+      padding: 6px 18px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    button:hover { background-color: rgb(240, 240, 100); }
+    button:disabled {
+      background-color: #ddd;
+      color: #999;
+      cursor: not-allowed;
+    }
+    button.btn-confirm {
+      background-color: #b6f0b6;
+      border-color: #5a9e5a;
+      font-weight: bold;
+      font-size: 15px;
+      padding: 8px 28px;
+    }
+    button.btn-confirm:hover { background-color: #96e096; }
+    button.btn-back {
+      background-color: rgb(255, 255, 139);
+    }
+    button.btn-refund {
+      background-color: #ffd0c0;
+      border-color: #cc6655;
+    }
+    button.btn-refund:hover { background-color: #ffb8a0; }
+
+    /* -- Quantity stepper -- */
+    .qty-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      margin: 12px 0;
+    }
+    .qty-row button {
+      width: 32px;
+      height: 32px;
+      padding: 0;
+      font-size: 18px;
+      line-height: 1;
+    }
+    #qty-display {
+      font-size: 20px;
+      font-weight: bold;
+      min-width: 32px;
+      text-align: center;
+    }
+
+    /* -- Status banners -- */
+    .banner {
+      padding: 12px 16px;
+      border: 1px solid;
+      margin-top: 16px;
+      font-size: 14px;
+    }
+    .banner-success { background: #d6f5d6; border-color: #5a9e5a; color: #2a5e2a; }
+    .banner-waitlist { background: #fff3cd; border-color: #c8a000; color: #7a5c00; }
+    .banner-error    { background: #fde8e8; border-color: #cc4444; color: #8b1a1a; }
+    .banner-info     { background: #e8f4fd; border-color: #4a90c8; color: #1a4a6b; }
+
+    /* -- Summary rows -- */
+    .summary-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 5px 0;
+      border-bottom: 1px solid #eee;
+      font-size: 14px;
+    }
+    .summary-row:last-child { border-bottom: none; }
+    .summary-row.total {
+      font-weight: bold;
+      font-size: 15px;
+      border-top: 2px solid #aaa;
+      padding-top: 8px;
+      margin-top: 4px;
+    }
+
+    /* -- Detail label/value pairs -- */
+    .detail-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 4px 0;
+      border-bottom: 1px dashed #ddd;
+      font-size: 13px;
+    }
+    .detail-row .label { color: #555; }
+    .detail-row .value { font-family: monospace; }
+
+    /* -- Badge pills -- */
+    .badge {
+      display: inline-block;
+      padding: 2px 10px;
+      border-radius: 3px;
+      font-size: 12px;
+      font-weight: bold;
+      border: 1px solid;
+    }
+    .badge-paid      { background:#d6f5d6; border-color:#5a9e5a; color:#2a5e2a; }
+    .badge-pending   { background:#fff3cd; border-color:#c8a000; color:#7a5c00; }
+    .badge-failed    { background:#fde8e8; border-color:#cc4444; color:#8b1a1a; }
+    .badge-confirmed { background:#d6f5d6; border-color:#5a9e5a; color:#2a5e2a; }
+    .badge-released  { background:#fde8e8; border-color:#cc4444; color:#8b1a1a; }
+    .badge-waitlisted{ background:#fff3cd; border-color:#c8a000; color:#7a5c00; }
+    .badge-reserved  { background:#e8f4fd; border-color:#4a90c8; color:#1a4a6b; }
+
+    /* -- Loading indicator -- */
+    #loading {
+      text-align: center;
+      padding: 30px;
+      font-style: italic;
+      color: #555;
+    }
+
+    /* -- Spinner -- */
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner {
+      display: inline-block;
+      width: 18px; height: 18px;
+      border: 3px solid #ccc;
+      border-top-color: #FF765C;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      vertical-align: middle;
+      margin-right: 8px;
+    }
+
+    /* Center utility */
+    .center { text-align: center; }
+
+    /* -- Refund confirm section -- */
+    #refund-confirm { display: none; }
+  </style>
+</head>
+<body>
+
+<h1>Purchase Tickets</h1>
+
+<div id="breadcrumb">
+  <a onclick="goBack()">&larr; Back to Events</a>
+</div>
+
+<div id="container">
+  <div id="loading">Loading event details...</div>
+  <div id="app" style="display:none;"></div>
+</div>
+
+<script>
+/* -- Utilities -- */
+function uuid() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0;
+    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+  });
+}
+
+function dollars(cents) {
+  return '$' + (cents / 100).toFixed(2);
+}
+
+function fmtDate(iso) {
+  if (!iso) return '-';
+  return new Date(iso).toLocaleDateString('en-US', {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+  });
+}
+
+function fmtDateTime(iso) {
+  if (!iso) return '-';
+  const d = new Date(iso);
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+       + ' at ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+}
+
+/* -- URL params -- */
+const params  = new URLSearchParams(window.location.search);
+const eventId = params.get('eventId') || params.get('event_id') || '';
+// userId: in a real auth system this would come from session; for now we use a param or a generated value
+const userId  = params.get('userId') || 'user_' + Math.floor(Math.random() * 9000 + 1000);
+
+/* -- Service URLs --
+ * purchase.html is served from ticket-purchase-service (:3002).
+ * To avoid cross-origin requests to the catalog (:3001) and refund (:3006)
+ * services, this page only calls same-origin endpoints. The
+ * ticket-purchase-service exposes UI proxy routes that forward to those
+ * services internally over the docker network. */
+const CATALOG_URL  = '';
+const PURCHASE_URL = '';
+const REFUND_URL   = '';
+
+/* -- State -- */
+let state = {
+  screen: 'loading',   // loading | select | processing | result | error
+  event: null,
+  quantity: 1,
+  purchase: null,
+  waitlisted: false,
+  loadError: '',
+  purchaseError: '',
+};
+
+/* -- Go back -- */
+function goBack() {
+  if (state.screen === 'result' && state.purchase?.payment_status !== 'paid') {
+    // failed -- let them retry
+    state.screen = 'select';
+    state.purchaseError = '';
+    render();
+  } else {
+    window.location.href = 'http://127.0.0.1:3001';
+  }
+}
+
+/* -- Fetch event -- */
+async function loadEvent() {
+  if (!eventId) {
+    state.screen = 'error';
+    state.loadError = 'No event ID provided. Please go back and click a Purchase button.';
+    render();
+    return;
+  }
+  try {
+    const res = await fetch(`${CATALOG_URL}/ui/events/${eventId}`);
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.error || `HTTP ${res.status}`);
+    }
+    const data = await res.json();
+    state.event = data.event;
+    state.screen = 'select';
+  } catch (err) {
+    state.screen = 'error';
+    state.loadError = 'Could not load event: ' + err.message;
+  }
+  render();
+}
+
+/* -- Create purchase -- */
+async function submitPurchase() {
+  const { event, quantity } = state;
+  state.screen = 'processing';
+  state.purchaseError = '';
+  render();
+
+  try {
+    const res = await fetch(`${PURCHASE_URL}/purchases`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': uuid(),
+      },
+      body: JSON.stringify({
+        userId,
+        eventId: event.id,
+        quantity,
+        unitTicketCents: event.basePriceCents,
+      }),
+    });
+
+    const data = await res.json();
+    const waitlisted = typeof data.message === 'string' && data.message.includes('waiting list');
+
+    state.purchase  = data.purchase;
+    state.waitlisted = waitlisted;
+    state.screen    = 'result';
+  } catch (err) {
+    state.purchaseError = err.message;
+    state.screen = 'select';
+  }
+  render();
+}
+
+/* -- Refund -- */
+async function submitRefund() {
+  const { purchase, event } = state;
+  document.getElementById('refund-confirm').style.display = 'none';
+  document.getElementById('refund-loading').style.display = 'block';
+
+  try {
+    const res = await fetch(`${REFUND_URL}/ui/refunds`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': uuid(),
+      },
+      body: JSON.stringify({
+        userId,
+        purchaseId: String(purchase.id),
+        eventId: String(purchase.event_id),
+        quantity: purchase.quantity,
+        refundAmountCents: purchase.unit_ticket_cents * purchase.quantity,
+      }),
+    });
+
+    const data = await res.json();
+    document.getElementById('refund-loading').style.display = 'none';
+    if (res.ok) {
+      document.getElementById('refund-success').style.display = 'block';
+      document.getElementById('refund-btn-row').style.display = 'none';
+    } else {
+      document.getElementById('refund-error').textContent = data.error || 'Refund failed.';
+      document.getElementById('refund-error').style.display = 'block';
+    }
+  } catch (err) {
+    document.getElementById('refund-loading').style.display = 'none';
+    document.getElementById('refund-error').textContent = err.message;
+    document.getElementById('refund-error').style.display = 'block';
+  }
+}
+
+/* -- Quantity controls -- */
+function changeQty(delta) {
+  const { event } = state;
+  const max = event.seats_available > 0 ? Math.min(10, event.seats_available) : 10;
+  state.quantity = Math.max(1, Math.min(max, state.quantity + delta));
+  // update display without full re-render
+  document.getElementById('qty-display').textContent = state.quantity;
+  updateSummary();
+}
+
+function updateSummary() {
+  const { event, quantity } = state;
+  const subtotal = event.basePriceCents * quantity;
+  const fees = Math.round(subtotal * 0.12);
+  const total = subtotal + fees;
+  const el = document.getElementById('order-summary');
+  if (el) el.innerHTML = summaryHTML(quantity, subtotal, fees, total);
+}
+
+/* -- HTML builders -- */
+function summaryHTML(qty, subtotal, fees, total) {
+  return `
+    <div class="summary-row"><span>${qty} &times; General Admission</span><span>${dollars(subtotal)}</span></div>
+    <div class="summary-row"><span>Service fees (12%)</span><span>${dollars(fees)}</span></div>
+    <div class="summary-row total"><span>Total</span><span>${dollars(total)}</span></div>
+  `;
+}
+
+function badgeHTML(value) {
+  const cls = {
+    paid: 'badge-paid', failed: 'badge-failed', pending: 'badge-pending',
+    confirmed: 'badge-confirmed', released: 'badge-released',
+    waitlisted: 'badge-waitlisted', reserved: 'badge-reserved',
+  }[value] || '';
+  return `<span class="badge ${cls}">${value}</span>`;
+}
+
+/* -- Render -- */
+function render() {
+  const loading = document.getElementById('loading');
+  const app     = document.getElementById('app');
+  const { screen, event, quantity, purchase, waitlisted, loadError, purchaseError } = state;
+
+  loading.style.display = 'none';
+  app.style.display = 'block';
+
+  if (screen === 'loading') {
+    loading.style.display = 'block';
+    app.style.display = 'none';
+    return;
+  }
+
+  if (screen === 'error') {
+    app.innerHTML = `
+      <div class="banner banner-error" style="margin-top:24px;">${loadError}</div>
+      <div class="center" style="margin-top:16px;">
+        <button class="btn-back" onclick="goBack()">&larr; Back to Events</button>
+      </div>`;
+    return;
+  }
+
+  if (screen === 'select') {
+    const soldOut = event.seats_available === 0;
+    const subtotal = event.basePriceCents * quantity;
+    const fees = Math.round(subtotal * 0.12);
+    const total = subtotal + fees;
+    const venueName = typeof event.venue === 'object' ? event.venue.name : event.venue;
+    const venueCity = typeof event.venue === 'object' ? event.venue.city : '';
+
+    app.innerHTML = `
+      ${purchaseError ? `<div class="banner banner-error" style="margin-top:16px;">Error: ${purchaseError}</div>` : ''}
+
+      <!-- Event Details -->
+      <div class="card">
+        <h3>${event.title}</h3>
+        <div class="card-body">
+          <table>
+            <tr><th>Date</th><td>${fmtDate(event.date)}</td></tr>
+            <tr><th>Venue</th><td>${venueName}${venueCity ? ' &mdash; ' + venueCity : ''}</td></tr>
+            <tr><th>Price per Ticket</th><td>${dollars(event.basePriceCents)}</td></tr>
+            <tr><th>Seats Available</th><td>${soldOut
+                ? '<span class="badge badge-failed">SOLD OUT</span>'
+                : event.seats_available <= 10
+                  ? `<strong>${event.seats_available}</strong> <span style="color:#aa6600">(limited!)</span>`
+                  : event.seats_available
+              }</td></tr>
+          </table>
+          ${soldOut ? `<div class="banner banner-waitlist" style="margin-top:12px;">
+            No seats currently available. You'll be added to the <strong>waitlist</strong> and notified when seats open.
+          </div>` : ''}
+        </div>
+      </div>
+
+      <!-- Quantity Picker -->
+      <div class="card">
+        <h3>Select Quantity</h3>
+        <div class="card-body">
+          <p style="text-align:center; margin:0 0 4px; font-size:14px; color:#555;">
+            Purchasing as: <strong>${userId}</strong>
+          </p>
+          <div class="qty-row">
+            <button onclick="changeQty(-1)">&minus;</button>
+            <span id="qty-display">${quantity}</span>
+            <button onclick="changeQty(1)">+</button>
+          </div>
+          <p style="text-align:center; font-size:13px; color:#777; margin:0;">max 10 per order</p>
+        </div>
+      </div>
+
+      <!-- Order Summary -->
+      <div class="card">
+        <h3>Order Summary</h3>
+        <div class="card-body">
+          <div id="order-summary">${summaryHTML(quantity, subtotal, fees, total)}</div>
+          <div style="margin-top:16px; text-align:center;">
+            <button class="btn-confirm" onclick="submitPurchase()">
+              ${soldOut ? 'Join Waitlist' : 'Confirm Purchase'}
+            </button>
+          </div>
+          <p style="text-align:center; font-size:12px; color:#777; margin:10px 0 0;">
+            Each purchase uses a unique key &mdash; safe to retry if something goes wrong.
+          </p>
+        </div>
+      </div>`;
+    return;
+  }
+
+  if (screen === 'processing') {
+    app.innerHTML = `
+      <div class="card" style="margin-top:24px;">
+        <h3>Processing your order...</h3>
+        <div class="card-body center" style="padding: 32px 20px;">
+          <p><span class="spinner"></span> Reserving ${quantity} ticket${quantity > 1 ? 's' : ''} for <strong>${event.title}</strong>...</p>
+          <p style="font-size:13px; color:#555; margin-top:12px;">Contacting payment service. Please don't close this tab.</p>
+        </div>
+      </div>`;
+    return;
+  }
+
+  if (screen === 'result') {
+    const confirmed  = purchase.payment_status === 'paid' && purchase.reservation_status === 'confirmed';
+    const failed     = purchase.payment_status === 'failed' || purchase.reservation_status === 'released';
+    const venueName  = typeof event?.venue === 'object' ? event.venue.name : (event?.venue || '');
+
+    const bannerClass = waitlisted ? 'banner-waitlist' : confirmed ? 'banner-success' : 'banner-error';
+    const bannerMsg   = waitlisted
+      ? "You've been added to the <strong>waitlist</strong>. We'll notify you when seats open."
+      : confirmed
+        ? `Your ${purchase.quantity} ticket${purchase.quantity > 1 ? 's' : ''} are <strong>confirmed!</strong> Check your email for a confirmation.`
+        : "Payment was <strong>declined</strong>. No charge was made. You can try again below.";
+
+    app.innerHTML = `
+      <div class="banner ${bannerClass}" style="margin-top:16px;">${bannerMsg}</div>
+
+      <!-- Purchase Details -->
+      <div class="card">
+        <h3>${waitlisted ? 'Waitlist Confirmation' : confirmed ? 'Order Confirmed' : 'Order Failed'}</h3>
+        <div class="card-body">
+          <table>
+            <tr><th>Purchase ID</th><td>#${purchase.id}</td></tr>
+            <tr><th>Event</th><td>${event?.title || 'Event #' + purchase.event_id}</td></tr>
+            ${venueName ? `<tr><th>Venue</th><td>${venueName}</td></tr>` : ''}
+            <tr><th>Tickets</th><td>${purchase.quantity} &times; General Admission</td></tr>
+            <tr><th>Unit Price</th><td>${dollars(purchase.unit_ticket_cents)}</td></tr>
+            <tr><th>Total Charged</th><td><strong>${dollars(purchase.unit_ticket_cents * purchase.quantity)}</strong></td></tr>
+            <tr><th>Payment</th><td>${badgeHTML(purchase.payment_status)}</td></tr>
+            <tr><th>Reservation</th><td>${badgeHTML(purchase.reservation_status)}</td></tr>
+            <tr><th>User</th><td>${purchase.user_id}</td></tr>
+            <tr><th>Placed</th><td>${fmtDateTime(purchase.created_at)}</td></tr>
+          </table>
+        </div>
+      </div>
+
+      ${confirmed ? `
+      <!-- Refund Section -->
+      <div class="card">
+        <h3>Refund</h3>
+        <div class="card-body">
+          <div id="refund-btn-row" class="center">
+            <button class="btn-refund" onclick="document.getElementById('refund-confirm').style.display='block';">
+              Request a Refund
+            </button>
+          </div>
+          <div id="refund-confirm" style="display:none; margin-top:12px;">
+            <div class="banner banner-error" style="margin-bottom:10px;">
+              Are you sure? This will refund <strong>${dollars(purchase.unit_ticket_cents * purchase.quantity)}</strong>
+              for ${purchase.quantity} ticket${purchase.quantity > 1 ? 's' : ''}. This cannot be undone.
+            </div>
+            <div class="center">
+              <button class="btn-refund" onclick="submitRefund()">Yes, Refund</button>
+              &nbsp;
+              <button onclick="document.getElementById('refund-confirm').style.display='none'">Cancel</button>
+            </div>
+          </div>
+          <div id="refund-loading" style="display:none;" class="center">
+            <span class="spinner"></span> Processing refund...
+          </div>
+          <div id="refund-success" style="display:none; margin-top:10px;" class="banner banner-success">
+            Refund processed. Funds will appear in 3-5 business days.
+          </div>
+          <div id="refund-error" class="banner banner-error" style="display:none; margin-top:10px;"></div>
+        </div>
+      </div>` : ''}
+
+      <!-- Actions -->
+      <div class="center" style="margin-top:20px;">
+        ${failed ? `<button class="btn-confirm" onclick="retryPurchase()">Try Again</button> &nbsp;` : ''}
+        <button class="btn-back" onclick="goBack()">&larr; Back to Events</button>
+      </div>`;
+    return;
+  }
+}
+
+function retryPurchase() {
+  state.screen = 'select';
+  state.purchase = null;
+  state.purchaseError = '';
+  render();
+}
+
+/* -- Boot -- */
+loadEvent();
+</script>
+</body>
+</html>
