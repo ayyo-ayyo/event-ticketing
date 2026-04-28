@@ -22,19 +22,26 @@
 
 ---
 
+- [ ] Caddy
+- [ ] k6 tests
+  - [ ] Scaling comparison
+  - [ ] Replica failure
+- [ ] connect front-ends
+- [ ] Replication
+
 ## Tasks
 
-### [Name]
+### [Ayo]
 
-- [ ] ...
+- [ ] finish analytics worker
 
-### [Name]
+### [Brian]
 
-- [ ] ...
+- [ ] finish purchase screen
 
-### [Name]
+### [Maycol]
 
-- [ ] ...
+- [ ] resolving dlq issues for ticket purchase service
 
 ---
 
