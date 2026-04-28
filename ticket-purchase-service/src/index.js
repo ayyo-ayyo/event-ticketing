@@ -1,6 +1,7 @@
 const express = require("express");
 const { Pool } = require("pg");
 const { createClient } = require("redis");
+const { startPurchaseWorker } = require("./purchase-worker");
 
 const app = express();
 app.use(express.json());
@@ -19,8 +20,16 @@ const redisClient = createClient({
   url: REDIS_URL,
 });
 
+const redisWorkerClient = createClient({
+  url: REDIS_URL,
+});
+
 redisClient.on("error", (err) => {
   console.error("Redis error:", err.message);
+});
+
+redisWorkerClient.on("error", (err) => {
+  console.error("Redis worker error:", err.message);
 });
 
 async function connectRedis() {
@@ -28,79 +37,128 @@ async function connectRedis() {
     await redisClient.connect();
     console.log("Connected to Redis");
   }
+
+  if (!redisWorkerClient.isOpen) {
+    await redisWorkerClient.connect();
+    console.log("Connected TPS purchase worker to Redis");
+  }
 }
 
-// HTTP to connect to Event Catalog Service
-async function connectEventCatalogService(){
+async function connectEventCatalogService() {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 5000); // Timeout 5s
+  const timeout = setTimeout(() => controller.abort(), 5000);
 
-  try{
-    const response = await fetch("http://event-catalog-service:3001/info", {signal: controller.signal});
+  try {
+    const response = await fetch("http://event-catalog-service:3001/info", {
+      signal: controller.signal,
+    });
     clearTimeout(timeout);
 
-    if(!response.ok){
+    if (!response.ok) {
       throw new Error(`HTTP error. Status: ${response.status}`);
     }
+
     const data = await response.json();
     console.log(data);
   } catch (error) {
-    if(error.name == "AbortError"){
-      console.error('Error: Timeout on HTTP request to Event Catalog Service');
+    if (error.name === "AbortError") {
+      console.error("Error: Timeout on HTTP request to Event Catalog Service");
     } else {
-      console.error('Error calling Event Catalog Service:', error.message)
+      console.error("Error calling Event Catalog Service:", error.message);
     }
   }
 }
 
-// Use this function for fetching events corresponding to the ticket
-async function fetchEvent(eventId){ 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 5000); // Timeout 5s;
-  try{
-    const response = await fetch(`http://event-catalog-service:3001/events/${eventId}`, {signal: controller.signal});
-    clearTimeout(timeout);
-
-    if(!response.ok){
-    throw new Error(`HTTP error. Status: ${response.status}`)
-    }
-  const event = await response.json();
-  return event;
-
-  } catch (error) {
-    if(error.name == "AbortError"){
-      console.error('')
-      console.error('Error: Timeout on HTTP request for fetching event based on eventId');
-    } else {
-      console.error('Error fetching event from Event Catalog Service:', error.message)
-    }
-  }
-}
-
-async function adjustEventSeats(event, eventId, quantity){
+async function fetchEvent(eventId) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 5000);
-  console.log(`Adjusting seats for eventId ${eventId} by ${quantity}. Current seats available: ${event.seats_available}`);
+
   try {
-          const updateResponse = await fetch(`http://event-catalog-service:3001/events/${eventId}`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              ...event,
-              seats_available: event.seats_available + quantity,
-            }),
-          });
-          if (!updateResponse.ok) {
-            throw new Error(`Failed to update seats for eventId: ${eventId}`);
-          }
-        } catch (updateErr) {
-          console.error("Failed to update seats in Event Catalog Service:", updateErr.message);
-          return res.status(502).json({
-            error: "Event Catalog Service unreachable",
-            purchase: result.rows[0],
-          });
-        }
-        
+    const response = await fetch(
+      `http://event-catalog-service:3001/events/${eventId}`,
+      { signal: controller.signal }
+    );
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      throw new Error(`HTTP error. Status: ${response.status}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    if (error.name === "AbortError") {
+      console.error(
+        "Error: Timeout on HTTP request for fetching event based on eventId"
+      );
+    } else {
+      console.error(
+        "Error fetching event from Event Catalog Service:",
+        error.message
+      );
+    }
+  }
+}
+
+async function adjustEventSeats(event, eventId, quantity) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+
+  console.log(
+    `Adjusting seats for eventId ${eventId} by ${quantity}. Current seats available: ${event.seats_available}`
+  );
+
+  try {
+    const updateResponse = await fetch(
+      `http://event-catalog-service:3001/events/${eventId}`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...event,
+          seats_available: event.seats_available + quantity,
+        }),
+        signal: controller.signal,
+      }
+    );
+    clearTimeout(timeout);
+
+    if (!updateResponse.ok) {
+      throw new Error(`Failed to update seats for eventId: ${eventId}`);
+    }
+  } catch (error) {
+    if (error.name === "AbortError") {
+      throw new Error(
+        "Timeout on HTTP request for updating event seats in Event Catalog Service"
+      );
+    }
+
+    throw error;
+  }
+}
+
+async function processQueuedPurchaseJob(job) {
+  if (job.purchaseId) {
+    const result = await pool.query("SELECT id FROM purchases WHERE id = $1", [
+      job.purchaseId,
+    ]);
+
+    if (result.rows.length === 0) {
+      throw new Error(`Purchase not found for purchaseId=${job.purchaseId}`);
+    }
+  }
+
+  if (job.idempotencyKey) {
+    const result = await pool.query(
+      "SELECT id FROM purchases WHERE idempotency_key = $1",
+      [job.idempotencyKey]
+    );
+
+    if (result.rows.length === 0) {
+      throw new Error(
+        `Purchase not found for idempotencyKey=${job.idempotencyKey}`
+      );
+    }
+  }
 }
 
 app.get("/", (req, res) => {
@@ -138,35 +196,28 @@ app.get("/health", async (req, res) => {
   });
 });
 
-//Endpoint to validate that a purchase exists for the refund service
-app.get('/purchases/:id', async (req, res) => {
+app.get("/purchases/:id", async (req, res) => {
   const { id } = req.params;
 
   try {
-    const result = await pool.query(
-      'SELECT * FROM purchases WHERE id = $1',
-      [id]
-    );
+    const result = await pool.query("SELECT * FROM purchases WHERE id = $1", [
+      id,
+    ]);
 
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Purchase not found' });
+      return res.status(404).json({ error: "Purchase not found" });
     }
 
     return res.status(200).json({ purchase: result.rows[0] });
   } catch (error) {
-    console.error('Failed to fetch purchase:', error.message);
-    return res.status(500).json({ error: 'Internal server error' });
+    console.error("Failed to fetch purchase:", error.message);
+    return res.status(500).json({ error: "Internal server error" });
   }
 });
 
 app.post("/purchases", async (req, res) => {
   const idempotencyKey = req.header("Idempotency-Key")?.trim();
-  const {
-    userId,
-    eventId,
-    quantity,
-    unitTicketCents,
-  } = req.body;
+  const { userId, eventId, quantity, unitTicketCents } = req.body;
 
   if (!idempotencyKey) {
     return res.status(400).json({
@@ -181,74 +232,74 @@ app.post("/purchases", async (req, res) => {
   }
 
   try {
-  let result;
+    let result;
 
-  try {
-    result = await pool.query(
-      `INSERT INTO purchases
-       (user_id, event_id, quantity, unit_ticket_cents, reservation_status, payment_status, idempotency_key)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       RETURNING *`,
-      [
-        userId,
-        eventId,
-        quantity,
-        unitTicketCents,
-        "reserved",
-        "pending",
-        idempotencyKey,
-      ]
-    );
-  } catch (insertErr) {
-    if (insertErr.code === POSTGRES_UNIQUE_VIOLATION) {
-      const existing = await pool.query(
-        "SELECT * FROM purchases WHERE idempotency_key = $1",
-        [idempotencyKey]
+    try {
+      result = await pool.query(
+        `INSERT INTO purchases
+         (user_id, event_id, quantity, unit_ticket_cents, reservation_status, payment_status, idempotency_key)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         RETURNING *`,
+        [
+          userId,
+          eventId,
+          quantity,
+          unitTicketCents,
+          "reserved",
+          "pending",
+          idempotencyKey,
+        ]
       );
+    } catch (insertErr) {
+      if (insertErr.code === POSTGRES_UNIQUE_VIOLATION) {
+        const existing = await pool.query(
+          "SELECT * FROM purchases WHERE idempotency_key = $1",
+          [idempotencyKey]
+        );
 
-      if (existing.rows.length > 0) {
-        return res.status(200).json({
-          message: "Duplicate request detected, returning existing purchase",
-          purchase: existing.rows[0],
-        });
+        if (existing.rows.length > 0) {
+          return res.status(200).json({
+            message: "Duplicate request detected, returning existing purchase",
+            purchase: existing.rows[0],
+          });
+        }
       }
+
+      throw insertErr;
     }
 
-    throw insertErr;
-  }
+    const event = (await fetchEvent(eventId))?.event || null;
+    if (!event) {
+      return res.status(404).json({
+        error: "Event not found for eventId: " + eventId,
+      });
+    }
 
-  const event = (await fetchEvent(eventId))?.event || null;
-  if (!event) {
-    return res.status(404).json({
-      error: "Event not found for eventId: " + eventId,
-    });
-  }
+    if (event.seats_available < quantity) {
+      const waitlistJob = {
+        userId: result.rows[0].user_id,
+        eventId: result.rows[0].event_id,
+        quantity: result.rows[0].quantity,
+        unitTicketCents: result.rows[0].unit_ticket_cents,
+      };
 
-  if (event.seats_available < quantity) {
-    const waitlistJob = {
-      userId: result.rows[0].user_id,
-      eventId: result.rows[0].event_id,
-      quantity: result.rows[0].quantity,
-      unitTicketCents: result.rows[0].unit_ticket_cents,
-    };
+      await redisClient.lPush("waitlist", JSON.stringify(waitlistJob));
 
-    await redisClient.lPush("waitlist", JSON.stringify(waitlistJob));
+      return res.status(200).json({
+        message:
+          "Purchase created but added to waiting list due to insufficient seats",
+        purchase: result.rows[0],
+        event,
+      });
+    }
 
-    return res.status(200).json({
-      message: "Purchase created but added to waiting list due to insufficient seats",
-      purchase: result.rows[0],
-      event,
-    });
-  }
-
-  await adjustEventSeats(event, eventId, -quantity);
-
+    await adjustEventSeats(event, eventId, -quantity);
 
     const purchase = result.rows[0];
 
-    // Synchronous HTTP call to Payment Service
     let paymentResult;
     let paymentResponse;
+
     try {
       paymentResponse = await fetch(`${PAYMENT_SERVICE_URL}/payments`, {
         method: "POST",
@@ -259,7 +310,7 @@ app.post("/purchases", async (req, res) => {
       paymentResult = await paymentResponse.json();
     } catch (paymentErr) {
       console.error("Failed to reach Payment Service:", paymentErr.message);
-      await adjustEventSeats(event, eventId, quantity); // Rollback seat reservation
+      await adjustEventSeats(event, eventId, quantity);
       return res.status(502).json({
         error: "Payment Service unreachable",
         purchase,
@@ -288,7 +339,6 @@ app.post("/purchases", async (req, res) => {
     }
 
     if (paymentResponse.ok) {
-      // Publish to notification queue so the Notification Worker sends a confirmation email
       const confirmedPurchase = updatedPurchase.rows[0];
       const notificationJob = JSON.stringify({
         purchaseId: confirmedPurchase.id,
@@ -307,14 +357,14 @@ app.post("/purchases", async (req, res) => {
         purchase: confirmedPurchase,
         payment: paymentResult,
       });
-    } else {
-      await adjustEventSeats(event, eventId, quantity); // Rollback seat reservation on payment failure
-      return res.status(402).json({
-        message: "Purchase created but payment failed",
-        purchase: updatedPurchase.rows[0],
-        payment: paymentResult,
-      });
     }
+
+    await adjustEventSeats(event, eventId, quantity);
+    return res.status(402).json({
+      message: "Purchase created but payment failed",
+      purchase: updatedPurchase.rows[0],
+      payment: paymentResult,
+    });
   } catch (err) {
     console.error("Failed to create purchase:", err.message);
     return res.status(500).json({
@@ -332,6 +382,15 @@ async function startServer() {
 
     app.listen(PORT, () => {
       console.log(`Ticket Purchase Service listening on port ${PORT}`);
+    });
+
+    startPurchaseWorker({
+      consumerClient: redisWorkerClient,
+      redisClient,
+      processJob: processQueuedPurchaseJob,
+    }).catch((err) => {
+      console.error("TPS purchase worker crashed:", err.message);
+      process.exit(1);
     });
   } catch (err) {
     console.error("Startup failed:", err.message);
