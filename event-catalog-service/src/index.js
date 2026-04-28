@@ -9,12 +9,17 @@ const DATABASE_URL = process.env.DATABASE_URL || 'postgres://catalog:catalog@eve
 const REDIS_URL = process.env.REDIS_URL || 'redis://redis:6379';
 
 const app = express();
+app.use(express.static(path.join(__dirname, 'public')))
 app.use(express.json());
 
 const pool = new Pool({ connectionString: DATABASE_URL });
 const redis = createClient({ url: REDIS_URL });
 const getEventByIdSql = fs.readFileSync(
   path.join(__dirname, '..', 'sql', 'get-event-by-id.sql'),
+  'utf8'
+);
+const getAllEvents = fs.readFileSync(
+  path.join(__dirname, '..', 'sql', 'get-all-events.sql'),
   'utf8'
 );
 const updateEventByIdSql = fs.readFileSync(
@@ -31,6 +36,10 @@ const newEventSql = fs.readFileSync(
 );
 const newVenueSql = fs.readFileSync(
   path.join(__dirname, '..', 'sql', 'new_venue.sql'),
+  'utf8'
+);
+const getAllVenues = fs.readFileSync(
+  path.join(__dirname, '..', 'sql', 'get-all-venues.sql'),
   'utf8'
 );
 
@@ -182,6 +191,30 @@ app.get('/events/:id', async (req, res) => {
   }
 });
 
+// get all events
+app.get('/events', async (__req, res) => {
+   try {
+    const result = await pool.query(getAllEvents);
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'events_not_found' });
+    }
+
+    const events = result.rows.map(row => ({
+      id: String(row.id),
+      title: row.title,
+      venue: row.venue,
+      date: row.event_date,
+      currency: 'USD',
+      basePriceCents: row.base_price_cents,
+      seats_available: row.seats_available
+    }));
+
+    return res.status(200).json({ source: 'database', events });
+  } catch (error) {
+    return res.status(500).json({ error: 'failed_to_fetch_events', message: error.message });
+  }
+});
 
 // Create a new event
 app.post('/events', async (req, res) => {
@@ -278,7 +311,27 @@ app.post('/venues', async (req, res) => {
   }
 });
 
+// get all venues
+app.get('/venues', async (__req, res) => {
+   try {
+    const result = await pool.query(getAllVenues);
 
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'venues_not_found' });
+    }
+
+    const venues = result.rows.map(row => ({
+      id: String(row.id),
+      name: row.name,
+      city: row.city,
+      capacity: row.capacity
+    }));
+
+    return res.status(200).json({ source: 'database', venues });
+  } catch (error) {
+    return res.status(500).json({ error: 'failed_to_fetch_venues', message: error.message });
+  }
+});
 
 async function start() {
   try {
@@ -288,7 +341,7 @@ async function start() {
 
     await redis.connect();
 
-    app.listen(PORT, () => {
+    app.listen(PORT, '0.0.0.0',() => {
       console.log(`event-catalog-service listening on port ${PORT}`);
     });
   } catch (error) {

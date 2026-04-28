@@ -37,17 +37,17 @@ INSERT INTO venues (name, city, capacity) VALUES
 ('Venue 2', 'Amherst', 1000),
 ('Venue 3', 'Hadley', 50);
 
-INSERT INTO events (venue_id, title, event_date, base_price_cents) VALUES
-(1, 'Event 1', NOW(), 100),
-(1, 'Event 2', NOW(), 1000),
-(1, 'Event 3', NOW(), 500),
-(1, 'Event 4', NOW(), 1499),
-(2, 'Event 5', NOW(), 200),
-(2, 'Event 6', NOW(), 550),
-(2, 'Event 7', NOW(), 150),
-(3, 'Event 8', NOW(), 300),
-(3, 'Event 9', NOW(), 10000),
-(3, 'Event 10', NOW(), 5000);
+INSERT INTO events (venue_id, title, event_date, base_price_cents, seats_available) VALUES
+(1, 'Event 1', NOW(), 100, 50),
+(1, 'Event 2', NOW(), 1000, 40),
+(1, 'Event 3', NOW(), 500, 20),
+(1, 'Event 4', NOW(), 1499, 12),
+(2, 'Event 5', NOW(), 200, 500),
+(2, 'Event 6', NOW(), 550, 403),
+(2, 'Event 7', NOW(), 150, 136),
+(3, 'Event 8', NOW(), 300, 34),
+(3, 'Event 9', NOW(), 10000, 12),
+(3, 'Event 10', NOW(), 5000, 4);
 
 INSERT INTO seat_inventory (event_id, section_name, total_seats, available_seats, price_cents) VALUES
 (1, 'Section A', 100, 50, 100),
