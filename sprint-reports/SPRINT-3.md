@@ -17,7 +17,7 @@ We added the k6 poison pills test, implemented the fraud worker w/ DLQ handling,
 | ----------- | ------------------- | ----------- |
 | Ayo      | added metrics table, purchase and browse events are pushed to analytics queue, started code for worker to process them, DLQ implemented but not working yet | 88718283194958a0ddc63b87d9a4a639eea714cc |
 | Jimmy Jiang | implement fraud detection worker, db, and dlq | 7ab67b1c6b995221d309482031f26052932c3038 |
-| [Name]      | | |
+| Lucky Kovvuri      |created payment service frontend user endpoint | 75333c65f7b9c865db01ff76ea94d32e61e03ffc |
 | [Name]      | | |
 
 ---
