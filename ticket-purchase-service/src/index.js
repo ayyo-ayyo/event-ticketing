@@ -332,6 +332,16 @@ app.post("/purchases", async (req, res) => {
         quantity: confirmedPurchase.quantity,
         unitTicketCents: confirmedPurchase.unit_ticket_cents,
       });
+      //Publish to analytics queue so the Analytics Worker can update sales metrics
+      const analyticsJob = JSON.stringify({
+        eventId: confirmedPurchase.event_id,
+        quantity: confirmedPurchase.quantity,
+        unitTicketCents: confirmedPurchase.unit_ticket_cents,
+      });
+      await redisClient.lPush("analytics:queue", analyticsJob);
+      console.log(
+        `[ticket-purchase-service] Published analytics job for purchaseId=${confirmedPurchase.id}`
+      );
       try {
         await redisClient.lPush("notification:queue", notificationJob);
         console.log(
