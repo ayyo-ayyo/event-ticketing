@@ -16,7 +16,7 @@
 
 | Team Member | What They Delivered | Key Commits |
 | ----------- | ------------------- | ----------- |
-| [Name]      | | |
+| Jimmy Jiang | implement fraud detection worker, db, and dlq | 7ab67b1c6b995221d309482031f26052932c3038 |
 | [Name]      | | |
 | [Name]      | | |
 
