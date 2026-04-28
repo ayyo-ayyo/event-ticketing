@@ -17,7 +17,7 @@
 | Team Member | What They Delivered | Key Commits |
 | ----------- | ------------------- | ----------- |
 | Jimmy Jiang | implement fraud detection worker, db, and dlq | 7ab67b1c6b995221d309482031f26052932c3038 |
-| [Name]      | | |
+| Lucky Kovvuri      |created payment service frontend user endpoint | 75333c65f7b9c865db01ff76ea94d32e61e03ffc |
 | [Name]      | | |
 
 ---
