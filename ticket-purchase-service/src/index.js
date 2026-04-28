@@ -302,6 +302,22 @@ app.post("/purchases", async (req, res) => {
         `[ticket-purchase-service] Published notification job for purchaseId=${confirmedPurchase.id}`
       );
 
+      // Publish to fraud detection queue for pattern analysis
+      const fraudJob = JSON.stringify({
+        purchaseId: confirmedPurchase.id,
+        userId: confirmedPurchase.user_id,
+        eventId: confirmedPurchase.event_id,
+        quantity: confirmedPurchase.quantity,
+        unitTicketCents: confirmedPurchase.unit_ticket_cents,
+        // Synthesized payment token — simulates a user's single card on file.
+        // In a real system this would be the tokenized card ID from the payment provider.
+        paymentToken: `tok_${confirmedPurchase.user_id}`,
+      });
+      await redisClient.lPush("fraud:queue", fraudJob);
+      console.log(
+        `[ticket-purchase-service] Published fraud detection job for purchaseId=${confirmedPurchase.id}`
+      );
+
       return res.status(201).json({
         message: "Purchase created and payment processed",
         purchase: confirmedPurchase,

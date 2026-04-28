@@ -242,6 +242,49 @@ services:
       timeout: 3s
       retries: 5
 
+  fraud-detection-worker:
+    build: ./fraud-detection-worker
+    container_name: fraud-detection-worker
+    restart: unless-stopped
+    ports:
+      - "3007:3007"
+    networks:
+      - team-net
+    environment:
+      PORT: 3007
+      DATABASE_URL: postgres://fraud:fraud@fraud-db:5432/fraud_db
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      fraud-db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3007/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  fraud-db:
+    image: postgres:16
+    container_name: fraud-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: fraud
+      POSTGRES_PASSWORD: fraud
+      POSTGRES_DB: fraud_db
+    volumes:
+      - fraud-db-data:/var/lib/postgresql/data
+      - ./fraud-detection-worker/sql/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - team-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fraud -d fraud_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   waitlist-worker:
     build: ./waitlist-worker
     container_name: waitlist-worker
@@ -270,3 +313,4 @@ volumes:
   purchase-db-data:
   event-catalog-db-data:
   refund-service-db-data:
+  fraud-db-data:
