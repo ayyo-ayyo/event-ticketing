@@ -19,9 +19,20 @@ redisClient.on("error", (err) => console.error("Redis error:", err));
 
 
 app.get("/health", async (req, res) => {
-  res.status(200).json({
-    status: "healthy",
-    service: "payment-service",
+  let redisStatus = 'down';
+  try {
+    await redisClient.ping();
+    redisStatus = 'up';
+  } catch (err) {
+    console.error('[payment-service] Redis health check failed:', err.message);
+  }
+
+  const healthy = redisStatus === 'up';
+
+  res.status(healthy ? 200 : 503).json({
+    status: healthy ? 'healthy' : 'unhealthy',
+    service: 'payment-service',
+    redis: redisStatus,
   });
 });
 
@@ -35,9 +46,18 @@ app.post("/payments", async (req, res) => {
     });
   }
 
-  const existing = await redisClient.get(`payment:${purchaseId}`);
-  if(existing){
-    return res.status(200).json(JSON.parse(existing));
+  let existing = null;
+  try {
+    existing = await redisClient.get(`payment:${purchaseId}`);
+  } catch (err) {
+    console.error('[payment-service] Redis get failed:', err.message);
+  }
+  if (existing) {
+    try {
+      return res.status(200).json(JSON.parse(existing));
+    } catch (err) {
+      console.error('[payment-service] Failed to parse cached payment:', err.message);
+    }
   }
   
   const success = Math.random() > 0.1;
@@ -46,7 +66,11 @@ app.post("/payments", async (req, res) => {
   const result = success? {status: "success", purchaseId, message: "Payment processed"} : { status: "failed", purchaseId, message: "Payment declined"};
   const statusCode = success ? 200 : 402
   
-  await redisClient.set(`payment:${purchaseId}`, JSON.stringify(result));
+  try {
+    await redisClient.set(`payment:${purchaseId}`, JSON.stringify(result));
+  } catch (err) {
+    console.error('[payment-service] Redis set failed:', err.message);
+  }
   
   return res.status(statusCode).json(result)
 
@@ -67,6 +91,17 @@ app.post("/payments", async (req, res) => {
   // });
 });
 
+
+
+app.get('/payments/status/:purchaseId', async (req, res) => {
+  const { purchaseId } = req.params
+  const existing = await redisClient.get(`payment:${purchaseId}`)
+  if (!existing) {
+    return res.status(404).json({ status: 'not found', purchaseId })
+  }
+  return res.status(200).json(JSON.parse(existing))
+})
+
 //Endpoint for refund-service to make refund
 app.post('/payments/refunds', async (req, res) => {
   const { purchaseId } = req.body;
@@ -75,9 +110,18 @@ app.post('/payments/refunds', async (req, res) => {
     return res.status(400).json({ status: 'failed', message: 'purchaseId is required' });
   }
 
-  const existing = await redisClient.get(`refund:${purchaseId}`);
+  let existing = null;
+  try {
+    existing = await redisClient.get(`refund:${purchaseId}`);
+  } catch (err) {
+    console.error('[payment-service] Redis get failed:', err.message);
+  }
   if (existing) {
-    return res.status(200).json(JSON.parse(existing));
+    try {
+      return res.status(200).json(JSON.parse(existing));
+    } catch (err) {
+      console.error('[payment-service] Failed to parse cached refund:', err.message);
+    }
   }
 
   const success = Math.random() > 0.1;
@@ -86,9 +130,73 @@ app.post('/payments/refunds', async (req, res) => {
     ? { status: 'success', purchaseId, message: 'Refund processed' }
     : { status: 'failed', purchaseId, message: 'Refund declined' };
 
-  await redisClient.set(`refund:${purchaseId}`, JSON.stringify(result));
+  try {
+    await redisClient.set(`refund:${purchaseId}`, JSON.stringify(result));
+  } catch (err) {
+    console.error('[payment-service] Redis set failed:', err.message);
+  }
 
   return res.status(success ? 200 : 402).json(result);
+})
+
+app.get("/", (req, res) => {
+  res.send(`
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>Payment Service</title>
+      </head>
+      <body>
+        <h1>Payment Service</h1>
+
+        <h2>Submit a Payment</h2>
+        <input type="text" id="paymentPurchaseId" placeholder="Purchase ID">
+        <button onclick="submitPayment()">Pay</button>
+        <pre id="paymentResult"></pre>
+
+        <h2>Submit a Refund</h2>
+        <input type="text" id="refundPurchaseId" placeholder="Purchase ID">
+        <button onclick="submitRefund()">Refund</button>
+        <pre id="refundResult"></pre>
+
+        <h2>Check Payment Status</h2>
+        <input type="text" id="statusPurchaseId" placeholder="Purchase ID">
+        <button onclick="checkStatus()">Check</button>
+        <pre id="statusResult"></pre>
+
+        <script>
+          async function submitPayment() {
+            const purchaseId = document.getElementById('paymentPurchaseId').value
+            const res = await fetch('/payments', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ purchaseId })
+            })
+            const data = await res.json()
+            document.getElementById('paymentResult').textContent = JSON.stringify(data, null, 2)
+          }
+
+          async function submitRefund() {
+            const purchaseId = document.getElementById('refundPurchaseId').value
+            const res = await fetch('/payments/refunds', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ purchaseId })
+            })
+            const data = await res.json()
+            document.getElementById('refundResult').textContent = JSON.stringify(data, null, 2)
+          }
+
+          async function checkStatus() {
+            const purchaseId = document.getElementById('statusPurchaseId').value
+            const res = await fetch('/payments/status/' + purchaseId)
+            const data = await res.json()
+            document.getElementById('statusResult').textContent = JSON.stringify(data, null, 2)
+          }
+        </script>
+      </body>
+    </html>
+  `)
 })
 
 async function startServer() {
