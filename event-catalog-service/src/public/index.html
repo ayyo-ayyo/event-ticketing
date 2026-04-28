@@ -1,0 +1,109 @@
+<!-- Since container listens on IPv4 I had to use http://127.0.0.1:3001 -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Venues and Events</title>
+<style>
+h1 {
+    font-family: Trebuchet;
+    text-align: center;
+    background-color: #FF765C;
+    color: #ffffff; 
+    padding: 10px;
+  }
+h3 {
+    font: Trebuchet;
+    text-align: center;
+    background-color: #FF765C;
+    color: white;
+    padding: 10px;
+}
+table {
+    margin-left: auto;
+    margin-right: auto;
+    font: Trebuchet;
+    text-align: center;
+    background-color: #ffffff;
+}
+button  {
+    font: Trebuchet;
+    background-color: rgb(255, 255, 139);
+}
+
+</style>
+</head>
+<body style="background-color:powderblue;">
+<h1>Venues and Events</h1>
+<button type="refresh" onclick="eventsFunc()">Refresh</button>
+<div id="venues-tables"></div>
+</body>
+
+<script>
+async function eventsFunc(){
+    const events = await fetch('/events');
+    const dataE = await events.json();
+    const eventsData = dataE.events;
+
+    const venues = await fetch('/venues');
+    const dataV = await venues.json();
+    const venuesData = dataV.venues;
+
+    const venuesTables = document.getElementById('venues-tables');
+    venuesTables.innerHTML = '';
+
+    const venueEvents = {};
+
+    eventsData.forEach(event => {
+        if(!venueEvents[event.venue]){
+            venueEvents[event.venue] = [];
+        }
+        venueEvents[event.venue].push(event);
+    })
+
+
+    venuesData.forEach(venue => {
+        const venueDiv = document.createElement('div');
+
+        const title = document.createElement('h3');
+        title.textContent = `${venue.name} in ${venue.city} (Capacity: ${venue.capacity}):`;
+        venueDiv.appendChild(title);
+
+        const table = document.createElement('table');
+        table.border = "1";
+
+        table.innerHTML = `
+            <thead>
+                <tr>
+                    <th>Event Id</th>
+                    <th>Title</th>
+                    <th>Date</th>
+                    <th>Price</th>
+                    <th>Seats Available</th>
+                    <th>Tickets</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${(venueEvents[venue.name] || []).map(event => `
+                    <tr>
+                        <td>${event.id}</td>
+                        <td>${event.title}</td>
+                        <td>${event.date}</td>
+                        <td>$${(event.basePriceCents / 100).toFixed(2)}</td>
+                        <td>${event.seats_available}</td>
+                        <td><button type="button">Purchase</button></td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        `;
+
+        venueDiv.appendChild(table);
+        venuesTables.appendChild(venueDiv);
+    });
+}
+
+setInterval(eventsFunc, 3000);
+eventsFunc();
+</script>
+</html>
