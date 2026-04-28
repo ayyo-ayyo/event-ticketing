@@ -19,7 +19,8 @@ We added the k6 poison pills test, implemented the fraud worker w/ DLQ handling,
 | Jimmy Jiang | implement fraud detection worker, db, and dlq | 7ab67b1c6b995221d309482031f26052932c3038 |
 | Lucky Kovvuri      |created payment service frontend user endpoint | 75333c65f7b9c865db01ff76ea94d32e61e03ffc |
 | Derek B | Added the k6 poison pill resilience test | 6c75a4fcff1ae48cb48a75e8dc63743231f97ccb |
-
+| Mateus Andrade | Implemented graceful failures | ed6bc137417e54fe611a874d612031bb8d3a144d |
+1dc3bbedf2b831a165606b2d8528039d05ca2fc2 |
 ---
 
 ## What Is Working
