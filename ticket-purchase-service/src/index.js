@@ -202,7 +202,7 @@ app.get("/purchases/:id", async (req, res) => {
   }
 });
 
-app.post("/purchases", async (req, res) => {
+async function createPurchase(req, res) {
   const idempotencyKey = req.header("Idempotency-Key")?.trim();
   const { userId, eventId, quantity, unitTicketCents } = req.body;
 
@@ -301,7 +301,21 @@ app.post("/purchases", async (req, res) => {
       });
     }
 
-    await adjustEventSeats(event, eventId, -quantity);
+    const seatsReserved = await adjustEventSeats(event, eventId, -quantity);
+    if (!seatsReserved) {
+      try {
+        await pool.query("DELETE FROM purchases WHERE id = $1", [result.rows[0].id]);
+      } catch (cleanupErr) {
+        console.error(
+          "[ticket-purchase-service] Failed to clean up purchase after seat reservation failure:",
+          cleanupErr.message
+        );
+      }
+
+      return res.status(502).json({
+        error: "Failed to reserve seats",
+      });
+    }
 
     const purchase = result.rows[0];
 
@@ -371,10 +385,19 @@ app.post("/purchases", async (req, res) => {
         quantity: confirmedPurchase.quantity,
         unitTicketCents: confirmedPurchase.unit_ticket_cents,
       });
-      await redisClient.lPush("analytics:queue", analyticsJob);
-      console.log(
-        `[ticket-purchase-service] Published analytics job for purchaseId=${confirmedPurchase.id}`
-      );
+      let analyticsQueued = true;
+      try {
+        await redisClient.lPush("analytics:queue", analyticsJob);
+        console.log(
+          `[ticket-purchase-service] Published analytics job for purchaseId=${confirmedPurchase.id}`
+        );
+      } catch (enqueueErr) {
+        analyticsQueued = false;
+        console.error(
+          "[ticket-purchase-service] Failed to enqueue analytics job:",
+          enqueueErr.message
+        );
+      }
       try {
         await redisClient.lPush("notification:queue", notificationJob);
         console.log(
@@ -386,14 +409,18 @@ app.post("/purchases", async (req, res) => {
           message: "Purchase created and payment processed, but notification queue is unavailable",
           purchase: confirmedPurchase,
           payment: paymentResult,
+          analyticsQueued,
           notificationQueued: false,
         });
       }
 
       return res.status(201).json({
-        message: "Purchase created and payment processed",
+        message: analyticsQueued
+          ? "Purchase created and payment processed"
+          : "Purchase created and payment processed, but analytics queue is unavailable",
         purchase: confirmedPurchase,
         payment: paymentResult,
+        ...(analyticsQueued ? {} : { analyticsQueued: false }),
       });
     } else {
       const seatsRestored = await adjustEventSeats(event, eventId, quantity); // Rollback seat reservation on payment failure
@@ -416,7 +443,9 @@ app.post("/purchases", async (req, res) => {
       error: "Internal server error",
     });
   }
-});
+}
+
+app.post("/purchases", createPurchase);
 
 async function startServer() {
   try {
@@ -445,4 +474,17 @@ async function startServer() {
   await connectEventCatalogService();
 }
 
-startServer();
+if (require.main === module) {
+  startServer();
+}
+
+module.exports = {
+  app,
+  pool,
+  redisClient,
+  redisWorkerClient,
+  startServer,
+  createPurchase,
+  fetchEvent,
+  adjustEventSeats,
+};
