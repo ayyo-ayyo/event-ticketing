@@ -9,11 +9,17 @@ const TICKET_PURCHASE_SERVICE_URL = process.env.TICKET_PURCHASE_SERVICE_URL;
 
 const WAITLIST_QUEUE = "waitlist";
 const DLQ = "waitlist:dlq";
+const SEAT_RELEASED_CHANNEL = "seat.released";
 
 const redisClient = createClient({ url: REDIS_URL });
+const subscriberClient = createClient({ url: REDIS_URL });
 
 redisClient.on("error", (err) => {
   console.error("[waitlist-worker] Redis error:", err.message);
+});
+
+subscriberClient.on("error", (err) => {
+  console.error("[waitlist-worker] Redis subscriber error:", err.message);
 });
 
 let lastProcessedAt = null;
@@ -67,7 +73,11 @@ async function processMessage(raw) {
       "[waitlist-worker] Poison pill, invalid JSON, moving to DLQ:",
       raw
     );
-    await redisClient.lPush(DLQ, raw);
+    try {
+      await redisClient.lPush(DLQ, raw);
+    } catch (pushErr) {
+      console.error("[waitlist-worker] Failed to push to DLQ:", pushErr.message);
+    }
     return;
   }
 
@@ -77,7 +87,11 @@ async function processMessage(raw) {
       "[waitlist-worker] Poison pill, missing required fields, moving to DLQ:",
       JSON.stringify(purchase)
     );
-    await redisClient.lPush(DLQ, raw);
+    try {
+      await redisClient.lPush(DLQ, raw);
+    } catch (pushErr) {
+      console.error("[waitlist-worker] Failed to push to DLQ:", pushErr.message);
+    }
     return;
   }
 
@@ -96,16 +110,38 @@ async function processMessage(raw) {
   };
 
   try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
     const response = await fetch(`${TICKET_PURCHASE_SERVICE_URL}/purchases`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "Idempotency-Key": promotionKey,
+        "X-Waitlist-Promotion": "true",
       },
       body: JSON.stringify(payload),
+      signal: controller.signal,
     });
+    clearTimeout(timeout);
 
     const result = await response.json();
+
+    if (response.status === 409) {
+      console.log(
+        `[waitlist-worker] Seats are still unavailable for user ${purchase.userId}, keeping entry at the front of the waitlist`
+      );
+      try {
+        await redisClient.lPush(WAITLIST_QUEUE, raw);
+      } catch (pushErr) {
+        console.error("[waitlist-worker] Failed to restore waitlist entry:", pushErr.message);
+        try {
+          await redisClient.lPush(DLQ, raw);
+        } catch (dlqErr) {
+          console.error("[waitlist-worker] Failed to push restored entry to DLQ:", dlqErr.message);
+        }
+      }
+      return;
+    }
 
     if (response.ok) {
       console.log(
@@ -117,53 +153,80 @@ async function processMessage(raw) {
       console.error(
         `[waitlist-worker] Promotion failed for user ${purchase.userId} (status ${response.status}): ${result.error || result.message} — moving to DLQ`
       );
-      await redisClient.lPush(DLQ, raw);
+      try {
+        await redisClient.lPush(DLQ, raw);
+      } catch (pushErr) {
+        console.error("[waitlist-worker] Failed to push to DLQ:", pushErr.message);
+      }
     }
   } catch (err) {
     // Ticket Purchase Service unreachable, put entry back at the tail so the next attempt can try again
     console.error(
       `[waitlist-worker] Could not reach Ticket Purchase Service: ${err.message} — re-queuing entry`
     );
-    await redisClient.rPush(WAITLIST_QUEUE, raw);
+    try {
+      await redisClient.rPush(WAITLIST_QUEUE, raw);
+    } catch (pushErr) {
+      console.error("[waitlist-worker] Failed to re-queue entry:", pushErr.message);
+      // If re-queueing fails, try pushing to DLQ to avoid losing the message
+      try {
+        await redisClient.lPush(DLQ, raw);
+      } catch (dlqErr) {
+        console.error("[waitlist-worker] Failed to push to DLQ after re-queue failure:", dlqErr.message);
+      }
+    }
   }
 }
 
-// Worker loop
+async function processNextWaitlistEntry(releaseEventRaw) {
+  if (releaseEventRaw) {
+    console.log(
+      `[waitlist-worker] Received ${SEAT_RELEASED_CHANNEL} event: ${releaseEventRaw}`
+    );
+  }
 
-async function runWorker() {
+  try {
+    const nextEntry = await redisClient.lPop(WAITLIST_QUEUE);
+
+    if (!nextEntry) {
+      console.log("[waitlist-worker] No waitlist entries to promote");
+      return;
+    }
+
+    console.log("[waitlist-worker] Message received from queue");
+    await processMessage(nextEntry);
+  } catch (err) {
+    console.error("[waitlist-worker] Failed to process next waitlist entry:", err.message);
+  }
+}
+
+// Worker subscription
+
+async function listenForSeatReleases() {
   console.log(
-    `[waitlist-worker] Listening on queue "${WAITLIST_QUEUE}" (DLQ: "${DLQ}")`
+    `[waitlist-worker] Listening for "${SEAT_RELEASED_CHANNEL}" events (queue: "${WAITLIST_QUEUE}", DLQ: "${DLQ}")`
   );
 
-  while (true) {
-    try {
-      // Block for up to 5 s waiting for the next message
-      const result = await redisClient.blPop(WAITLIST_QUEUE, 5);
-
-      if (result) {
-        console.log("[waitlist-worker] Message received from queue");
-        await processMessage(result.element);
-      }
-    } catch (err) {
-      console.error("[waitlist-worker] Worker loop error:", err.message);
-      // Brief pause before looping to avoid a tight error spin
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-    }
-  }
+  await subscriberClient.subscribe(SEAT_RELEASED_CHANNEL, async (message) => {
+    await processNextWaitlistEntry(message);
+  });
 }
 
 // Startup
 
 async function start() {
   await redisClient.connect();
+  await subscriberClient.connect();
   console.log("[waitlist-worker] Connected to Redis");
 
   app.listen(PORT, () => {
     console.log(`[waitlist-worker] Health endpoint listening on port ${PORT}`);
   });
 
-  // Run worker loop without awaiting so the health endpoint stays responsive
-  runWorker();
+  listenForSeatReleases().catch((err) => {
+    console.error("[waitlist-worker] Subscription loop failed:", err.message);
+    process.exit(1);
+  });
 }
 
 start().catch((err) => {

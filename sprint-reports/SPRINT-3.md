@@ -7,8 +7,7 @@
 ---
 
 ## What We Built
-
-[What failure scenarios does the system now handle? Which queues have DLQ handling? What happens when a poison pill is injected?]
+We added the k6 poison pills test, implemented the fraud worker w/ DLQ handling, started the analytics worker, has DLQ handling (untested/not working), when a poison pill is injected, the request heads straight to the DLQ of whatever worker it was injected into. Also started implementing a front-end, and making sure the system fails gracefully
 
 ---
 
@@ -16,24 +15,28 @@
 
 | Team Member | What They Delivered | Key Commits |
 | ----------- | ------------------- | ----------- |
-| [Name]      | | |
-| [Name]      | | |
-| [Name]      | | |
-
+| Ayo      | added metrics table, purchase and browse events are pushed to analytics queue, started code for worker to process them, DLQ implemented but not working yet | 88718283194958a0ddc63b87d9a4a639eea714cc |
+| Jimmy Jiang | implement fraud detection worker, db, and dlq | 7ab67b1c6b995221d309482031f26052932c3038 |
+| Lucky Kovvuri      |created payment service frontend user endpoint | 75333c65f7b9c865db01ff76ea94d32e61e03ffc |
+| Derek B | Added the k6 poison pill resilience test | 6c75a4fcff1ae48cb48a75e8dc63743231f97ccb |
+| Mateus Andrade | Implemented graceful failures | ed6bc137417e54fe611a874d612031bb8d3a144d |
+1dc3bbedf2b831a165606b2d8528039d05ca2fc2 |
+| Sean R   | Implemented frontend page for events and venues which updates with new events | 988413a839a27e47b2639c7d2a971c54bca0fdd7, 4f7eea264602b094b29aa720932e11fb78ce4248 |
+| Maycol M | worked on adding a dlq for the ticket-purchase-service, still working planning to go to sprint 4|
 ---
 
 ## What Is Working
 
-- [ ] Poison pill handling: malformed messages go to DLQ, worker keeps running
-- [ ] Worker `GET /health` shows non-zero `dlq_depth` after poison pills are injected
-- [ ] Worker status remains `healthy` while DLQ fills
-- [ ] System handles failure scenarios gracefully (no dangling state, no crash loops)
-- [ ] All services/workers required for team size are implemented
+- [X] Poison pill handling: malformed messages go to DLQ, worker keeps running
+- [X] Worker `GET /health` shows non-zero `dlq_depth` after poison pills are injected
+- [X] Worker status remains `healthy` while DLQ fills
+- [X] System handles failure scenarios gracefully (no dangling state, no crash loops)
+- [X] All services/workers required for team size are implemented
 
 ---
 
 ## What Is Not Working / Cut
-
+The analytics worker is not working yet
 ---
 
 ## Poison Pill Demonstration
@@ -89,3 +92,4 @@ Worker health after injection:
 ---
 
 ## Blockers and Lessons Learned
+While waiting for the the compose to rebuild between tests, it can be easy to get distracted, perhaps restarting individual containers for testing would be faster

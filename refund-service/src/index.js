@@ -26,7 +26,10 @@ async function connectRedis(){
 //HTTP to connect to the ticket purchase service
 async function connectTicketPurchaseService(){
   try{
-    const response = await fetch('http://ticket-purchase-service:3002/');
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    const response = await fetch('http://ticket-purchase-service:3002/', { signal: controller.signal });
+    clearTimeout(timeout);
 
     if(!response.ok){
       throw new Error(`HTTP error, status: ${response.status}`);
@@ -42,7 +45,10 @@ async function connectTicketPurchaseService(){
 //HTTP to connect to the payment service
 async function connectPaymentService(){
   try{
-    const response = await fetch('http://payment-service:3003/health');
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    const response = await fetch('http://payment-service:3003/health', { signal: controller.signal });
+    clearTimeout(timeout);
 
     if(!response.ok){
       throw new Error(`HTTP error, status: ${response.status}`);
@@ -126,39 +132,57 @@ app.post('/refunds', async (req, res) => {
       });
     }
 
-    const purchaseResponse = await fetch(`http://ticket-purchase-service:3002/purchases/${purchaseId}`);
+    // Fetch purchase info with timeout and clear distinction for 404 vs service outage
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
+      const purchaseResponse = await fetch(`http://ticket-purchase-service:3002/purchases/${purchaseId}`, { signal: controller.signal });
+      clearTimeout(timeout);
 
-    if(purchaseResponse.status === 404){
-      return res.status(404).json({ error: 'Purchase not found' });
-    }
+      if (purchaseResponse.status === 404) {
+        return res.status(404).json({ error: 'Purchase not found' });
+      }
 
-    if(!purchaseResponse.ok){
+      if (!purchaseResponse.ok) {
+        return res.status(502).json({ error: 'Failed to reach ticket-purchase-service' });
+      }
+    } catch (fetchErr) {
+      console.error('Error fetching purchase:', fetchErr.message);
       return res.status(502).json({ error: 'Failed to reach ticket-purchase-service' });
     }
 
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
     const paymentResponse = await fetch('http://payment-service:3003/payments/refunds', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ purchaseId })
+      body: JSON.stringify({ purchaseId }),
+      signal: controller.signal,
     });
+    clearTimeout(timeout);
 
     if(!paymentResponse.ok){
       const paymentResult = await paymentResponse.json();
       return res.status(502).json({ error: 'Refund payment reversal failed', detail: paymentResult.message });
     }
+    
 
     const result = await pool.query(
       `INSERT INTO refunds (user_id, purchase_id, event_id, quantity, refund_amount_cents, idempotency_key) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
       [userId, purchaseId, eventId, quantity, refundAmountCents, idempotencyKey]
     );
-
-    //Seat released event on Redis
-    await redisClient.publish('seat.released', JSON.stringify({
-      eventId,
-      purchaseId,
-      quantity,
-      refundId: result.rows[0].id
-    }));
+    
+    // Seat released event on Redis 
+    try {
+      await redisClient.publish('seat.released', JSON.stringify({
+        eventId,
+        purchaseId,
+        quantity,
+        refundId: result.rows[0].id
+      }));
+    } catch (pubErr) {
+      console.error('Failed to publish seat.released event:', pubErr.message);
+    }
 
     return res.status(201).json({
       message: 'Refund created successfully',
