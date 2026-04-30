@@ -219,7 +219,7 @@ app.get("/purchases/:id", async (req, res) => {
 
 // UI proxy: lets purchase.html (served from this service) read events from the
 // catalog service without a cross-origin browser request.
-app.get("/ui/events/:id", async (req, res) => {
+async function getUiEvent(req, res) {
   try {
     const data = await fetchEvent(req.params.id);
     return res.status(200).json(data);
@@ -229,11 +229,13 @@ app.get("/ui/events/:id", async (req, res) => {
     }
     return res.status(502).json({ error: "Event Catalog Service unavailable" });
   }
-});
+}
+
+app.get("/ui/events/:id", getUiEvent);
 
 // UI proxy: forwards a refund request from the browser to refund-service so
 // purchase.html stays same-origin.
-app.post("/ui/refunds", async (req, res) => {
+async function postUiRefund(req, res) {
   const idempotencyKey = req.header("Idempotency-Key")?.trim();
   if (!idempotencyKey) {
     return res.status(400).json({ error: "Idempotency-Key header is required" });
@@ -260,7 +262,9 @@ app.post("/ui/refunds", async (req, res) => {
     console.error("Failed to reach Refund Service:", err.message);
     return res.status(502).json({ error: "Refund Service unavailable" });
   }
-});
+}
+
+app.post("/ui/refunds", postUiRefund);
 
 async function createPurchase(req, res) {
   const idempotencyKey = req.header("Idempotency-Key")?.trim();
@@ -585,6 +589,8 @@ module.exports = {
   redisWorkerClient,
   startServer,
   createPurchase,
+  getUiEvent,
+  postUiRefund,
   fetchEvent,
   adjustEventSeats,
 };

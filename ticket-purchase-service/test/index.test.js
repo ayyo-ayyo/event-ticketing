@@ -1,0 +1,258 @@
+const test = require("node:test");
+const assert = require("node:assert/strict");
+
+const {
+  pool,
+  redisClient,
+  createPurchase,
+  getUiEvent,
+  postUiRefund,
+} = require("../src/index");
+
+function createResponseDouble() {
+  return {
+    statusCode: 200,
+    body: undefined,
+    status(code) {
+      this.statusCode = code;
+      return this;
+    },
+    json(payload) {
+      this.body = payload;
+      return this;
+    },
+  };
+}
+
+test("GET /ui/events/:id proxies event payload", async () => {
+  const originalFetch = global.fetch;
+
+  global.fetch = async (url) => {
+    assert.equal(url, "http://event-catalog-service:3001/events/event-123");
+    return {
+      ok: true,
+      async json() {
+        return { event: { id: "event-123", seats_available: 9 } };
+      },
+    };
+  };
+
+  try {
+    const req = {
+      params: { id: "event-123" },
+    };
+    const res = createResponseDouble();
+
+    await getUiEvent(req, res);
+
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(res.body, {
+      event: { id: "event-123", seats_available: 9 },
+    });
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("POST /ui/refunds requires Idempotency-Key header", async () => {
+  const req = {
+    header() {
+      return undefined;
+    },
+    body: { purchaseId: 1 },
+  };
+  const res = createResponseDouble();
+
+  await postUiRefund(req, res);
+
+  assert.equal(res.statusCode, 400);
+  assert.deepEqual(res.body, {
+    error: "Idempotency-Key header is required",
+  });
+});
+
+test("POST /ui/refunds forwards refund response and status", async () => {
+  const originalFetch = global.fetch;
+
+  global.fetch = async (url, options) => {
+    assert.equal(url, "http://refund-service:3006/refunds");
+    assert.equal(options.method, "POST");
+    assert.equal(options.headers["Idempotency-Key"], "refund-123");
+    assert.equal(options.headers["Content-Type"], "application/json");
+    assert.deepEqual(JSON.parse(options.body), { purchaseId: 42 });
+
+    return {
+      status: 202,
+      async json() {
+        return { refundId: "r-1", status: "queued" };
+      },
+    };
+  };
+
+  try {
+    const req = {
+      header(name) {
+        if (name === "Idempotency-Key") {
+          return "refund-123";
+        }
+        return undefined;
+      },
+      body: { purchaseId: 42 },
+    };
+    const res = createResponseDouble();
+
+    await postUiRefund(req, res);
+
+    assert.equal(res.statusCode, 202);
+    assert.deepEqual(res.body, {
+      refundId: "r-1",
+      status: "queued",
+    });
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("GET /ui/events/:id returns 404 when event lookup misses", async () => {
+  const originalFetch = global.fetch;
+
+  global.fetch = async () => ({
+    ok: false,
+    status: 404,
+  });
+
+  try {
+    const req = {
+      params: { id: "missing-event" },
+    };
+    const res = createResponseDouble();
+
+    await getUiEvent(req, res);
+
+    assert.equal(res.statusCode, 404);
+    assert.deepEqual(res.body, {
+      error: "Event not found",
+    });
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("POST /ui/refunds returns 502 when refund service is unavailable", async () => {
+  const originalFetch = global.fetch;
+
+  global.fetch = async () => {
+    throw new Error("network down");
+  };
+
+  try {
+    const req = {
+      header(name) {
+        if (name === "Idempotency-Key") {
+          return "refund-123";
+        }
+        return undefined;
+      },
+      body: { purchaseId: 42 },
+    };
+    const res = createResponseDouble();
+
+    await postUiRefund(req, res);
+
+    assert.equal(res.statusCode, 502);
+    assert.deepEqual(res.body, {
+      error: "Refund Service unavailable",
+    });
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("createPurchase rejects waitlist promotion when seats stay unavailable", async () => {
+  const originalQuery = pool.query;
+  const originalFetch = global.fetch;
+  const originalLPush = redisClient.lPush;
+
+  const queryCalls = [];
+
+  pool.query = async (sql, params) => {
+    queryCalls.push({ sql, params });
+
+    if (sql.includes("INSERT INTO purchases")) {
+      return {
+        rows: [
+          {
+            id: 99,
+            user_id: "user-1",
+            event_id: "event-1",
+            quantity: 2,
+            unit_ticket_cents: 5000,
+          },
+        ],
+      };
+    }
+
+    if (sql === "DELETE FROM purchases WHERE id = $1") {
+      assert.deepEqual(params, [99]);
+      return { rowCount: 1 };
+    }
+
+    throw new Error(`Unexpected query: ${sql}`);
+  };
+
+  redisClient.lPush = async () => {
+    throw new Error("waitlist should not be enqueued for promotion retries");
+  };
+
+  global.fetch = async (url) => {
+    assert.equal(url, "http://event-catalog-service:3001/events/event-1");
+    return {
+      ok: true,
+      async json() {
+        return {
+          event: {
+            id: "event-1",
+            seats_available: 1,
+          },
+        };
+      },
+    };
+  };
+
+  const req = {
+    header(name) {
+      const headers = {
+        "Idempotency-Key": "idem-123",
+        "X-Waitlist-Promotion": "true",
+      };
+      return headers[name];
+    },
+    body: {
+      userId: "user-1",
+      eventId: "event-1",
+      quantity: 2,
+      unitTicketCents: 5000,
+    },
+  };
+  const res = createResponseDouble();
+
+  try {
+    await createPurchase(req, res);
+
+    assert.equal(res.statusCode, 409);
+    assert.deepEqual(res.body, {
+      error: "Insufficient seats for waitlist promotion",
+      event: {
+        id: "event-1",
+        seats_available: 1,
+      },
+    });
+    assert.equal(queryCalls.length, 2);
+    assert.match(queryCalls[0].sql, /INSERT INTO purchases/);
+    assert.equal(queryCalls[1].sql, "DELETE FROM purchases WHERE id = $1");
+  } finally {
+    pool.query = originalQuery;
+    global.fetch = originalFetch;
+    redisClient.lPush = originalLPush;
+  }
+});
