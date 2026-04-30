@@ -1,16 +1,20 @@
 const express = require("express");
+const path = require("path");
 const { Pool } = require("pg");
 const { createClient } = require("redis");
 const { startPurchaseWorker } = require("./purchase-worker");
 
 const app = express();
 app.use(express.json());
+app.use(express.static(path.join(__dirname, "public")));
 
 const PORT = process.env.PORT || 3002;
 const DATABASE_URL = process.env.DATABASE_URL;
 const REDIS_URL = process.env.REDIS_URL;
 const PAYMENT_SERVICE_URL = process.env.PAYMENT_SERVICE_URL;
+const REFUND_SERVICE_URL = process.env.REFUND_SERVICE_URL || "http://refund-service:3006";
 const POSTGRES_UNIQUE_VIOLATION = "23505";
+const SEAT_RELEASED_CHANNEL = "seat.released";
 
 const pool = new Pool({
   connectionString: DATABASE_URL,
@@ -148,6 +152,17 @@ async function processQueuedPurchaseJob(job) {
   }
 }
 
+async function publishSeatReleased(eventId, purchaseId, quantity) {
+  try {
+    await redisClient.publish(
+      SEAT_RELEASED_CHANNEL,
+      JSON.stringify({ eventId, purchaseId, quantity })
+    );
+  } catch (pubErr) {
+    console.error("Failed to publish seat.released event:", pubErr.message);
+  }
+}
+
 app.get("/", (req, res) => {
   res.json({
     service: "ticket-purchase-service",
@@ -202,9 +217,60 @@ app.get("/purchases/:id", async (req, res) => {
   }
 });
 
+// UI proxy: lets purchase.html (served from this service) read events from the
+// catalog service without a cross-origin browser request.
+app.get("/ui/events/:id", async (req, res) => {
+  try {
+    const data = await fetchEvent(req.params.id);
+    return res.status(200).json(data);
+  } catch (err) {
+    if (err.status === 404) {
+      return res.status(404).json({ error: "Event not found" });
+    }
+    return res.status(502).json({ error: "Event Catalog Service unavailable" });
+  }
+});
+
+// UI proxy: forwards a refund request from the browser to refund-service so
+// purchase.html stays same-origin.
+app.post("/ui/refunds", async (req, res) => {
+  const idempotencyKey = req.header("Idempotency-Key")?.trim();
+  if (!idempotencyKey) {
+    return res.status(400).json({ error: "Idempotency-Key header is required" });
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+  try {
+    const response = await fetch(`${REFUND_SERVICE_URL}/refunds`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Idempotency-Key": idempotencyKey,
+      },
+      body: JSON.stringify(req.body),
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+
+    const body = await response.json().catch(() => ({}));
+    return res.status(response.status).json(body);
+  } catch (err) {
+    clearTimeout(timeout);
+    console.error("Failed to reach Refund Service:", err.message);
+    return res.status(502).json({ error: "Refund Service unavailable" });
+  }
+});
+
 async function createPurchase(req, res) {
   const idempotencyKey = req.header("Idempotency-Key")?.trim();
-  const { userId, eventId, quantity, unitTicketCents } = req.body;
+  const isWaitlistPromotion = req.header("X-Waitlist-Promotion") === "true";
+  const {
+    userId,
+    eventId,
+    quantity,
+    unitTicketCents,
+  } = req.body;
 
   if (!idempotencyKey) {
     return res.status(400).json({
@@ -271,6 +337,22 @@ async function createPurchase(req, res) {
     }
 
     if (event.seats_available < quantity) {
+      if (isWaitlistPromotion) {
+        try {
+          await pool.query("DELETE FROM purchases WHERE id = $1", [result.rows[0].id]);
+        } catch (cleanupErr) {
+          console.error(
+            "[ticket-purchase-service] Failed to clean up promotion purchase after insufficient seats:",
+            cleanupErr.message
+          );
+        }
+
+        return res.status(409).json({
+          error: "Insufficient seats for waitlist promotion",
+          event,
+        });
+      }
+
       const waitlistJob = {
         userId: result.rows[0].user_id,
         eventId: result.rows[0].event_id,
@@ -343,6 +425,7 @@ async function createPurchase(req, res) {
           purchase,
         });
       }
+      await publishSeatReleased(eventId, purchase.id, quantity);
       return res.status(502).json({
         error: "Payment Service unreachable",
         purchase,
@@ -414,6 +497,22 @@ async function createPurchase(req, res) {
         });
       }
 
+      // Publish to fraud detection queue for pattern analysis
+      const fraudJob = JSON.stringify({
+        purchaseId: confirmedPurchase.id,
+        userId: confirmedPurchase.user_id,
+        eventId: confirmedPurchase.event_id,
+        quantity: confirmedPurchase.quantity,
+        unitTicketCents: confirmedPurchase.unit_ticket_cents,
+        // Synthesized payment token — simulates a user's single card on file.
+        // In a real system this would be the tokenized card ID from the payment provider.
+        paymentToken: `tok_${confirmedPurchase.user_id}`,
+      });
+      await redisClient.lPush("fraud:queue", fraudJob);
+      console.log(
+        `[ticket-purchase-service] Published fraud detection job for purchaseId=${confirmedPurchase.id}`
+      );
+
       return res.status(201).json({
         message: analyticsQueued
           ? "Purchase created and payment processed"
@@ -431,6 +530,7 @@ async function createPurchase(req, res) {
           payment: paymentResult,
         });
       }
+      await publishSeatReleased(eventId, updatedPurchase.rows[0].id, quantity);
       return res.status(402).json({
         message: "Purchase created but payment failed",
         purchase: updatedPurchase.rows[0],

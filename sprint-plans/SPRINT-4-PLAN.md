@@ -22,19 +22,42 @@
 
 ---
 
+
+
+
 ## Tasks
 
-### [Name]
+### [Ayo]
 
-- [ ] ...
+- [ ] finish analytics worker
 
-### [Name]
+### [Brian]
 
-- [ ] ...
+- [ ] finish purchase screen
 
-### [Name]
+### [Maycol]
 
-- [ ] ...
+- [ ] resolving dlq issues for ticket purchase service
+
+### [Sean]
+
+- [ ] Caddy
+
+### [Lucky]
+
+ - [ ] k6 Scaling comparison test
+
+### [Derek]
+
+- [ ] Replication
+
+### [Jimmy]
+
+- [ ] connect frontends
+
+### [Mateus]
+
+- [ ] k6 Replica failure test
 
 ---
 
