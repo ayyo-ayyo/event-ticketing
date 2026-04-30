@@ -1,14 +1,17 @@
 const express = require("express");
+const path = require("path");
 const { Pool } = require("pg");
 const { createClient } = require("redis");
 
 const app = express();
 app.use(express.json());
+app.use(express.static(path.join(__dirname, "public")));
 
 const PORT = process.env.PORT || 3002;
 const DATABASE_URL = process.env.DATABASE_URL;
 const REDIS_URL = process.env.REDIS_URL;
 const PAYMENT_SERVICE_URL = process.env.PAYMENT_SERVICE_URL;
+const REFUND_SERVICE_URL = process.env.REFUND_SERVICE_URL || "http://refund-service:3006";
 const POSTGRES_UNIQUE_VIOLATION = "23505";
 const SEAT_RELEASED_CHANNEL = "seat.released";
 
@@ -171,6 +174,51 @@ app.get('/purchases/:id', async (req, res) => {
   } catch (error) {
     console.error('Failed to fetch purchase:', error.message);
     return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// UI proxy: lets purchase.html (served from this service) read events from the
+// catalog service without a cross-origin browser request.
+app.get("/ui/events/:id", async (req, res) => {
+  try {
+    const data = await fetchEvent(req.params.id);
+    return res.status(200).json(data);
+  } catch (err) {
+    if (err.status === 404) {
+      return res.status(404).json({ error: "Event not found" });
+    }
+    return res.status(502).json({ error: "Event Catalog Service unavailable" });
+  }
+});
+
+// UI proxy: forwards a refund request from the browser to refund-service so
+// purchase.html stays same-origin.
+app.post("/ui/refunds", async (req, res) => {
+  const idempotencyKey = req.header("Idempotency-Key")?.trim();
+  if (!idempotencyKey) {
+    return res.status(400).json({ error: "Idempotency-Key header is required" });
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+  try {
+    const response = await fetch(`${REFUND_SERVICE_URL}/refunds`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Idempotency-Key": idempotencyKey,
+      },
+      body: JSON.stringify(req.body),
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+
+    const body = await response.json().catch(() => ({}));
+    return res.status(response.status).json(body);
+  } catch (err) {
+    clearTimeout(timeout);
+    console.error("Failed to reach Refund Service:", err.message);
+    return res.status(502).json({ error: "Refund Service unavailable" });
   }
 });
 
