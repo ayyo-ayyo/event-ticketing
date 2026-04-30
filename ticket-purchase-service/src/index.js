@@ -10,6 +10,7 @@ const DATABASE_URL = process.env.DATABASE_URL;
 const REDIS_URL = process.env.REDIS_URL;
 const PAYMENT_SERVICE_URL = process.env.PAYMENT_SERVICE_URL;
 const POSTGRES_UNIQUE_VIOLATION = "23505";
+const SEAT_RELEASED_CHANNEL = "seat.released";
 
 const pool = new Pool({
   connectionString: DATABASE_URL,
@@ -106,6 +107,17 @@ async function adjustEventSeats(event, eventId, quantity){
         
 }
 
+async function publishSeatReleased(eventId, purchaseId, quantity) {
+  try {
+    await redisClient.publish(
+      SEAT_RELEASED_CHANNEL,
+      JSON.stringify({ eventId, purchaseId, quantity })
+    );
+  } catch (pubErr) {
+    console.error("Failed to publish seat.released event:", pubErr.message);
+  }
+}
+
 app.get("/", (req, res) => {
   res.json({
     service: "ticket-purchase-service",
@@ -164,6 +176,7 @@ app.get('/purchases/:id', async (req, res) => {
 
 app.post("/purchases", async (req, res) => {
   const idempotencyKey = req.header("Idempotency-Key")?.trim();
+  const isWaitlistPromotion = req.header("X-Waitlist-Promotion") === "true";
   const {
     userId,
     eventId,
@@ -236,6 +249,22 @@ app.post("/purchases", async (req, res) => {
   }
 
   if (event.seats_available < quantity) {
+    if (isWaitlistPromotion) {
+      try {
+        await pool.query("DELETE FROM purchases WHERE id = $1", [result.rows[0].id]);
+      } catch (cleanupErr) {
+        console.error(
+          "[ticket-purchase-service] Failed to clean up promotion purchase after insufficient seats:",
+          cleanupErr.message
+        );
+      }
+
+      return res.status(409).json({
+        error: "Insufficient seats for waitlist promotion",
+        event,
+      });
+    }
+
     const waitlistJob = {
       userId: result.rows[0].user_id,
       eventId: result.rows[0].event_id,
@@ -295,6 +324,7 @@ app.post("/purchases", async (req, res) => {
           purchase,
         });
       }
+      await publishSeatReleased(eventId, purchase.id, quantity);
       return res.status(502).json({
         error: "Payment Service unreachable",
         purchase,
@@ -371,6 +401,7 @@ app.post("/purchases", async (req, res) => {
           payment: paymentResult,
         });
       }
+      await publishSeatReleased(eventId, updatedPurchase.rows[0].id, quantity);
       return res.status(402).json({
         message: "Purchase created but payment failed",
         purchase: updatedPurchase.rows[0],
