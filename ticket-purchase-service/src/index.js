@@ -3,6 +3,10 @@ const path = require("path");
 const { Pool } = require("pg");
 const { createClient } = require("redis");
 const { startPurchaseWorker } = require("./purchase-worker");
+const {
+  PURCHASE_QUEUE_KEY,
+  PURCHASE_DLQ_KEY,
+} = require("./purchase-queue");
 
 const app = express();
 app.use(express.json());
@@ -170,9 +174,11 @@ app.get("/", (req, res) => {
   });
 });
 
-app.get("/health", async (req, res) => {
+async function getHealth(req, res) {
   let database = "down";
   let redis = "down";
+  let queueDepth = null;
+  let dlqDepth = null;
 
   try {
     await pool.query("SELECT 1");
@@ -183,6 +189,8 @@ app.get("/health", async (req, res) => {
 
   try {
     await redisClient.ping();
+    queueDepth = await redisClient.lLen(PURCHASE_QUEUE_KEY);
+    dlqDepth = await redisClient.lLen(PURCHASE_DLQ_KEY);
     redis = "up";
   } catch (err) {
     console.error("Redis health check failed:", err.message);
@@ -195,8 +203,12 @@ app.get("/health", async (req, res) => {
     service: "ticket-purchase-service",
     database,
     redis,
+    queueDepth,
+    dlqDepth,
   });
-});
+}
+
+app.get("/health", getHealth);
 
 app.get("/purchases/:id", async (req, res) => {
   const { id } = req.params;
@@ -589,6 +601,7 @@ module.exports = {
   redisWorkerClient,
   startServer,
   createPurchase,
+  getHealth,
   getUiEvent,
   postUiRefund,
   fetchEvent,

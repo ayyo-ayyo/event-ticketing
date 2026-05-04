@@ -5,6 +5,7 @@ const {
   pool,
   redisClient,
   createPurchase,
+  getHealth,
   getUiEvent,
   postUiRefund,
 } = require("../src/index");
@@ -51,6 +52,81 @@ test("GET /ui/events/:id proxies event payload", async () => {
     });
   } finally {
     global.fetch = originalFetch;
+  }
+});
+
+test("GET /health includes TPS queue and DLQ depths", async () => {
+  const originalQuery = pool.query;
+  const originalPing = redisClient.ping;
+  const originalLLen = redisClient.lLen;
+
+  pool.query = async (sql) => {
+    assert.equal(sql, "SELECT 1");
+    return { rows: [{ "?column?": 1 }] };
+  };
+  redisClient.ping = async () => "PONG";
+  redisClient.lLen = async (key) => {
+    if (key === "tps:purchase:queue") {
+      return 7;
+    }
+    if (key === "tps:purchase:dlq") {
+      return 2;
+    }
+    throw new Error(`Unexpected Redis key: ${key}`);
+  };
+
+  try {
+    const res = createResponseDouble();
+
+    await getHealth({}, res);
+
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(res.body, {
+      status: "healthy",
+      service: "ticket-purchase-service",
+      database: "up",
+      redis: "up",
+      queueDepth: 7,
+      dlqDepth: 2,
+    });
+  } finally {
+    pool.query = originalQuery;
+    redisClient.ping = originalPing;
+    redisClient.lLen = originalLLen;
+  }
+});
+
+test("GET /health leaves queue depths null when Redis is unavailable", async () => {
+  const originalQuery = pool.query;
+  const originalPing = redisClient.ping;
+  const originalLLen = redisClient.lLen;
+
+  pool.query = async () => ({ rows: [{ "?column?": 1 }] });
+  redisClient.ping = async () => {
+    throw new Error("redis down");
+  };
+  redisClient.lLen = async () => {
+    throw new Error("lLen should not run when ping fails");
+  };
+
+  try {
+    const res = createResponseDouble();
+
+    await getHealth({}, res);
+
+    assert.equal(res.statusCode, 503);
+    assert.deepEqual(res.body, {
+      status: "unhealthy",
+      service: "ticket-purchase-service",
+      database: "up",
+      redis: "down",
+      queueDepth: null,
+      dlqDepth: null,
+    });
+  } finally {
+    pool.query = originalQuery;
+    redisClient.ping = originalPing;
+    redisClient.lLen = originalLLen;
   }
 });
 
