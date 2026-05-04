@@ -18,6 +18,10 @@ function validateJob(job) {
     return "Purchase job must include userId and eventId";
   }
 
+  if (!job.purchaseId && !job.idempotencyKey) {
+    return "Purchase job must include purchaseId or idempotencyKey";
+  }
+
   const quantity = Number(job.quantity);
   if (!Number.isInteger(quantity) || quantity <= 0) {
     return "Purchase job must include a positive integer quantity";

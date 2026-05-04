@@ -94,6 +94,60 @@ test("purchase job missing required fields goes to DLQ", async () => {
   assert.match(dlqRecord.errorMessage, /userId and eventId/);
 });
 
+test("purchase job without purchase identity goes to DLQ", async () => {
+  const redisClient = createRedisDouble();
+  let processed = false;
+
+  const result = await processPurchaseMessage(
+    JSON.stringify(
+      validJob({
+        purchaseId: undefined,
+        idempotencyKey: undefined,
+      })
+    ),
+    {
+      redisClient,
+      logger,
+      async processJob() {
+        processed = true;
+      },
+    }
+  );
+
+  assert.equal(result, "dlq");
+  assert.equal(processed, false);
+  assert.equal(redisClient.lPushCalls.length, 1);
+  assert.equal(redisClient.rPushCalls.length, 0);
+
+  const dlqRecord = JSON.parse(redisClient.lPushCalls[0].value);
+  assert.match(dlqRecord.errorMessage, /purchaseId or idempotencyKey/);
+});
+
+test("purchase job can identify purchase by idempotency key only", async () => {
+  const redisClient = createRedisDouble();
+  let processedJob;
+
+  const result = await processPurchaseMessage(
+    JSON.stringify(
+      validJob({
+        purchaseId: undefined,
+      })
+    ),
+    {
+      redisClient,
+      logger,
+      async processJob(job) {
+        processedJob = job;
+      },
+    }
+  );
+
+  assert.equal(result, "processed");
+  assert.equal(processedJob.idempotencyKey, "idem-1");
+  assert.equal(redisClient.lPushCalls.length, 0);
+  assert.equal(redisClient.rPushCalls.length, 0);
+});
+
 test("purchase job that fails 3 times goes to DLQ", async () => {
   const redisClient = createRedisDouble();
 
