@@ -82,25 +82,62 @@ async function adjustEventSeats(event, eventId, quantity){
   const timeout = setTimeout(() => controller.abort(), 5000);
   console.log(`Adjusting seats for eventId ${eventId} by ${quantity}. Current seats available: ${event.seats_available}`);
   try {
-          const updateResponse = await fetch(`http://event-catalog-service:3001/events/${eventId}`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              ...event,
-              seats_available: event.seats_available + quantity,
-            }),
-          });
-          if (!updateResponse.ok) {
-            throw new Error(`Failed to update seats for eventId: ${eventId}`);
-          }
-        } catch (updateErr) {
-          console.error("Failed to update seats in Event Catalog Service:", updateErr.message);
-          return res.status(502).json({
-            error: "Event Catalog Service unreachable",
-            purchase: result.rows[0],
-          });
-        }
-        
+    const updateResponse = await fetch(`http://event-catalog-service:3001/events/${eventId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...event,
+        seats_available: event.seats_available + quantity,
+      }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    if (!updateResponse.ok) {
+      throw new Error(`Failed to update seats for eventId: ${eventId}`);
+    }
+    event.seats_available += quantity; // Update local event object to reflect new seat count
+    return true;
+  } catch (updateErr) {
+    console.error("Failed to update seats in Event Catalog Service:", updateErr.message);
+    clearTimeout(timeout);
+    return false;
+  }
+}
+
+async function processQueuedPurchaseJob(job) {
+  if (job.purchaseId) {
+    const result = await pool.query("SELECT id FROM purchases WHERE id = $1", [
+      job.purchaseId,
+    ]);
+
+    if (result.rows.length === 0) {
+      throw new Error(`Purchase not found for purchaseId=${job.purchaseId}`);
+    }
+  }
+
+  if (job.idempotencyKey) {
+    const result = await pool.query(
+      "SELECT id FROM purchases WHERE idempotency_key = $1",
+      [job.idempotencyKey]
+    );
+
+    if (result.rows.length === 0) {
+      throw new Error(
+        `Purchase not found for idempotencyKey=${job.idempotencyKey}`
+      );
+    }
+  }
+}
+
+async function publishSeatReleased(eventId, purchaseId, quantity) {
+  try {
+    await redisClient.publish(
+      SEAT_RELEASED_CHANNEL,
+      JSON.stringify({ eventId, purchaseId, quantity })
+    );
+  } catch (pubErr) {
+    console.error("Failed to publish seat.released event:", pubErr.message);
+  }
 }
 
 app.get("/", (req, res) => {
