@@ -110,12 +110,13 @@ async function adjustEventSeats(event, eventId, quantity) {
     `Adjusting seats for eventId ${eventId} by ${quantity}. Current seats available: ${event.seats_available}`
   );
   try {
+    const nextSeatsAvailable = event.seats_available + quantity;
     const updateResponse = await fetch(`http://event-catalog-service:3001/events/${eventId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         ...event,
-        seats_available: event.seats_available + quantity,
+        seats_available: nextSeatsAvailable,
       }),
       signal: controller.signal,
     });
@@ -123,6 +124,7 @@ async function adjustEventSeats(event, eventId, quantity) {
     if (!updateResponse.ok) {
       throw new Error(`Failed to update seats for eventId: ${eventId}`);
     }
+    event.seats_available = nextSeatsAvailable;
     return true;
   } catch (updateErr) {
     console.error("Failed to update seats in Event Catalog Service:", updateErr.message);

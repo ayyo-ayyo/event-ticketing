@@ -377,6 +377,95 @@ test("createPurchase publishes confirmed purchases to the TPS purchase queue", a
   }
 });
 
+test("createPurchase restores reserved seats without inflating capacity when payment is unreachable", async () => {
+  const originalQuery = pool.query;
+  const originalFetch = global.fetch;
+  const originalPublish = redisClient.publish;
+
+  const seatUpdates = [];
+  const insertedPurchase = {
+    id: 102,
+    user_id: "user-1",
+    event_id: "event-1",
+    quantity: 2,
+    unit_ticket_cents: 5000,
+    reservation_status: "reserved",
+    payment_status: "pending",
+    idempotency_key: "idem-rollback-1",
+    created_at: "2026-05-05T12:00:00.000Z",
+  };
+
+  pool.query = async (sql) => {
+    if (sql.includes("INSERT INTO purchases")) {
+      return { rows: [insertedPurchase] };
+    }
+
+    throw new Error(`Unexpected query: ${sql}`);
+  };
+
+  global.fetch = async (url, options = {}) => {
+    if (url === "http://event-catalog-service:3001/events/event-1" && !options.method) {
+      return {
+        ok: true,
+        async json() {
+          return {
+            event: {
+              id: "event-1",
+              seats_available: 10,
+            },
+          };
+        },
+      };
+    }
+
+    if (url === "http://event-catalog-service:3001/events/event-1" && options.method === "PUT") {
+      seatUpdates.push(JSON.parse(options.body).seats_available);
+      return {
+        ok: true,
+      };
+    }
+
+    if (url === "http://payment-service:3003/payments") {
+      throw new Error("payment service down");
+    }
+
+    throw new Error(`Unexpected fetch: ${url}`);
+  };
+
+  redisClient.publish = async () => 1;
+
+  const req = {
+    header(name) {
+      if (name === "Idempotency-Key") {
+        return "idem-rollback-1";
+      }
+      return undefined;
+    },
+    body: {
+      userId: "user-1",
+      eventId: "event-1",
+      quantity: 2,
+      unitTicketCents: 5000,
+    },
+  };
+  const res = createResponseDouble();
+
+  try {
+    await createPurchase(req, res);
+
+    assert.equal(res.statusCode, 502);
+    assert.deepEqual(seatUpdates, [8, 10]);
+    assert.deepEqual(res.body, {
+      error: "Payment Service unreachable",
+      purchase: insertedPurchase,
+    });
+  } finally {
+    pool.query = originalQuery;
+    global.fetch = originalFetch;
+    redisClient.publish = originalPublish;
+  }
+});
+
 test("createPurchase rejects waitlist promotion when seats stay unavailable", async () => {
   const originalQuery = pool.query;
   const originalFetch = global.fetch;
