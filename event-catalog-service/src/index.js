@@ -178,7 +178,7 @@ app.get('/events/:id', async (req, res) => {
     //push to analytics queue so the Analytics Worker can update read metrics
     const analyticsJob = JSON.stringify({
       eventId: event.id,
-      read: 1,
+      time: new Date().toISOString(),
     });
     await redis.lPush("analytics:queue", analyticsJob);
     return res.status(200).json({ source: 'database', event });
