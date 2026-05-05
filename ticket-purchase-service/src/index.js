@@ -15,7 +15,7 @@ app.use(express.static(path.join(__dirname, "public")));
 const PORT = process.env.PORT || 3002;
 const DATABASE_URL = process.env.DATABASE_URL;
 const REDIS_URL = process.env.REDIS_URL;
-const PAYMENT_SERVICE_URL = process.env.PAYMENT_SERVICE_URL;
+const PAYMENT_SERVICE_URL = process.env.PAYMENT_SERVICE_URL || "http://payment-service:3003";
 const REFUND_SERVICE_URL = process.env.REFUND_SERVICE_URL || "http://refund-service:3006";
 const POSTGRES_UNIQUE_VIOLATION = "23505";
 const SEAT_RELEASED_CHANNEL = "seat.released";
@@ -471,6 +471,14 @@ async function createPurchase(req, res) {
 
     if (paymentResponse.ok) {
       const confirmedPurchase = updatedPurchase.rows[0];
+      const purchaseJob = JSON.stringify({
+        purchaseId: confirmedPurchase.id,
+        userId: confirmedPurchase.user_id,
+        eventId: confirmedPurchase.event_id,
+        quantity: confirmedPurchase.quantity,
+        idempotencyKey: confirmedPurchase.idempotency_key,
+        createdAt: confirmedPurchase.created_at,
+      });
       const notificationJob = JSON.stringify({
         purchaseId: confirmedPurchase.id,
         userId: confirmedPurchase.user_id,
@@ -484,7 +492,20 @@ async function createPurchase(req, res) {
         quantity: confirmedPurchase.quantity,
         unitTicketCents: confirmedPurchase.unit_ticket_cents,
       });
+      let purchaseQueued = true;
       let analyticsQueued = true;
+      try {
+        await redisClient.lPush(PURCHASE_QUEUE_KEY, purchaseJob);
+        console.log(
+          `[ticket-purchase-service] Published TPS purchase job for purchaseId=${confirmedPurchase.id}`
+        );
+      } catch (enqueueErr) {
+        purchaseQueued = false;
+        console.error(
+          "[ticket-purchase-service] Failed to enqueue TPS purchase job:",
+          enqueueErr.message
+        );
+      }
       try {
         await redisClient.lPush("analytics:queue", analyticsJob);
         console.log(
@@ -508,6 +529,7 @@ async function createPurchase(req, res) {
           message: "Purchase created and payment processed, but notification queue is unavailable",
           purchase: confirmedPurchase,
           payment: paymentResult,
+          purchaseQueued,
           analyticsQueued,
           notificationQueued: false,
         });
@@ -535,6 +557,7 @@ async function createPurchase(req, res) {
           : "Purchase created and payment processed, but analytics queue is unavailable",
         purchase: confirmedPurchase,
         payment: paymentResult,
+        ...(purchaseQueued ? {} : { purchaseQueued: false }),
         ...(analyticsQueued ? {} : { analyticsQueued: false }),
       });
     } else {
