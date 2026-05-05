@@ -1,0 +1,11 @@
+:80 {
+    handle /events* {
+        reverse_proxy event-catalog-service:3001
+    }   
+    handle /purchases* {
+        reverse_proxy ticket-purchase-service:3002
+    }
+    handle /payments* {
+        reverse_proxy payment-service:3003
+    }
+}
