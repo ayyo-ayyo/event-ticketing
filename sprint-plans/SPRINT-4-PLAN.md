@@ -30,7 +30,7 @@ We're also planning on doing the last of the k6 tests, and resolving dlq issues 
 | Lucky     | `k6/sprint-4-scaling.js` |
 | Sean     | `caddy/` |
 | Maycol     | `ticket-purchase-service/` |
-| Jimmy     | `` |
+| Jimmy     | `index.html`, `purchase.html` |
 | Derek     | `` |
 
 ---
