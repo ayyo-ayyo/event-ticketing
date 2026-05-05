@@ -172,6 +172,29 @@ app.post('/refunds', async (req, res) => {
       [userId, purchaseId, eventId, quantity, refundAmountCents, idempotencyKey]
     );
     
+    // Restore seats in the event catalog service
+    try {
+      const eventCtrl = new AbortController();
+      const eventTimeout = setTimeout(() => eventCtrl.abort(), 5000);
+      const eventResponse = await fetch(`http://event-catalog-service:3001/events/${eventId}`, { signal: eventCtrl.signal });
+      clearTimeout(eventTimeout);
+
+      if (eventResponse.ok) {
+        const { event } = await eventResponse.json();
+        const updateCtrl = new AbortController();
+        const updateTimeout = setTimeout(() => updateCtrl.abort(), 5000);
+        await fetch(`http://event-catalog-service:3001/events/${eventId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...event, seats_available: event.seats_available + quantity }),
+          signal: updateCtrl.signal,
+        });
+        clearTimeout(updateTimeout);
+      }
+    } catch (seatErr) {
+      console.error('Failed to restore seats after refund:', seatErr.message);
+    }
+
     // Seat released event on Redis 
     try {
       await redisClient.publish('seat.released', JSON.stringify({
