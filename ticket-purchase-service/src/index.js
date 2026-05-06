@@ -62,18 +62,21 @@ async function fetchEvent(eventId){
     clearTimeout(timeout);
 
     if(!response.ok){
-    throw new Error(`HTTP error. Status: ${response.status}`)
+      const error = new Error(`HTTP error. Status: ${response.status}`);
+      error.status = response.status;
+      throw error;
     }
   const event = await response.json();
   return event;
 
   } catch (error) {
     if(error.name == "AbortError"){
-      console.error('')
+      clearTimeout(timeout);
       console.error('Error: Timeout on HTTP request for fetching event based on eventId');
     } else {
       console.error('Error fetching event from Event Catalog Service:', error.message)
     }
+    throw error;
   }
 }
 
@@ -254,10 +257,18 @@ app.post("/purchases", async (req, res) => {
     throw insertErr;
   }
 
-  const event = (await fetchEvent(eventId))?.event || null;
-  if (!event) {
-    return res.status(404).json({
-      error: "Event not found for eventId: " + eventId,
+  let event;
+  try {
+    event = (await fetchEvent(eventId))?.event || null;
+  } catch (fetchErr) {
+    if (fetchErr.status === 404) {
+      return res.status(404).json({
+        error: "Event not found for eventId: " + eventId,
+      });
+    }
+
+    return res.status(502).json({
+      error: "Event Catalog Service unavailable",
     });
   }
 
@@ -269,7 +280,21 @@ app.post("/purchases", async (req, res) => {
       unitTicketCents: result.rows[0].unit_ticket_cents,
     };
 
-    await redisClient.lPush("waitlist", JSON.stringify(waitlistJob));
+    try {
+      await redisClient.lPush("waitlist", JSON.stringify(waitlistJob));
+    } catch (enqueueErr) {
+      console.error("[ticket-purchase-service] Failed to enqueue waitlist job:", enqueueErr.message);
+      try {
+        await pool.query("DELETE FROM purchases WHERE id = $1", [result.rows[0].id]);
+      } catch (cleanupErr) {
+        console.error("[ticket-purchase-service] Failed to clean up orphan purchase:", cleanupErr.message);
+      }
+
+      return res.status(503).json({
+        error: "Waitlist queue unavailable",
+        purchase: result.rows[0],
+      });
+    }
 
     return res.status(200).json({
       message: "Purchase created but added to waiting list due to insufficient seats",
@@ -287,16 +312,26 @@ app.post("/purchases", async (req, res) => {
     let paymentResult;
     let paymentResponse;
     try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
       paymentResponse = await fetch(`${PAYMENT_SERVICE_URL}/payments`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ purchaseId: purchase.id }),
+        signal: controller.signal,
       });
+      clearTimeout(timeout);
 
       paymentResult = await paymentResponse.json();
     } catch (paymentErr) {
       console.error("Failed to reach Payment Service:", paymentErr.message);
-      await adjustEventSeats(event, eventId, quantity); // Rollback seat reservation
+      const seatsRestored = await adjustEventSeats(event, eventId, quantity); // Rollback seat reservation
+      if (!seatsRestored) {
+        return res.status(502).json({
+          error: "Payment Service unreachable and seat rollback failed",
+          purchase,
+        });
+      }
       return res.status(502).json({
         error: "Payment Service unreachable",
         purchase,
@@ -334,10 +369,6 @@ app.post("/purchases", async (req, res) => {
         quantity: confirmedPurchase.quantity,
         unitTicketCents: confirmedPurchase.unit_ticket_cents,
       });
-      await redisClient.lPush("notification:queue", notificationJob);
-      console.log(
-        `[ticket-purchase-service] Published notification job for purchaseId=${confirmedPurchase.id}`
-      );
       //Publish to analytics queue so the Analytics Worker can update sales metrics
       const analyticsJob = JSON.stringify({
         eventId: confirmedPurchase.event_id,
@@ -348,6 +379,20 @@ app.post("/purchases", async (req, res) => {
       console.log(
         `[ticket-purchase-service] Published analytics job for purchaseId=${confirmedPurchase.id}`
       );
+      try {
+        await redisClient.lPush("notification:queue", notificationJob);
+        console.log(
+          `[ticket-purchase-service] Published notification job for purchaseId=${confirmedPurchase.id}`
+        );
+      } catch (enqueueErr) {
+        console.error("[ticket-purchase-service] Failed to enqueue notification job:", enqueueErr.message);
+        return res.status(201).json({
+          message: "Purchase created and payment processed, but notification queue is unavailable",
+          purchase: confirmedPurchase,
+          payment: paymentResult,
+          notificationQueued: false,
+        });
+      }
 
       return res.status(201).json({
         message: "Purchase created and payment processed",
@@ -355,7 +400,14 @@ app.post("/purchases", async (req, res) => {
         payment: paymentResult,
       });
     } else {
-      await adjustEventSeats(event, eventId, quantity); // Rollback seat reservation on payment failure
+      const seatsRestored = await adjustEventSeats(event, eventId, quantity); // Rollback seat reservation on payment failure
+      if (!seatsRestored) {
+        return res.status(502).json({
+          message: "Purchase created but payment failed and seat rollback failed",
+          purchase: updatedPurchase.rows[0],
+          payment: paymentResult,
+        });
+      }
       return res.status(402).json({
         message: "Purchase created but payment failed",
         purchase: updatedPurchase.rows[0],
