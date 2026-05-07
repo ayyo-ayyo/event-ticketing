@@ -123,7 +123,7 @@ services:
       retries: 3
       start_period: 15s
 
-
+  
   refund-service:
     build: ./refund-service
     container_name: refund-service
@@ -321,6 +321,47 @@ services:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile
     networks:
       - team-net
+  analytics-worker:
+    build: ./analytics-worker
+    container_name: analytics-worker
+    restart: unless-stopped
+    ports:
+      - "3007:3007"
+    networks:
+      - team-net
+    environment:
+      - DATABASE_URL=postgres://postgres:postgres@analytics-db:5432/analytics_db
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      analytics-db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3007/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  analytics-db:
+    image: postgres:16
+    container_name: analytics-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: analytics_db
+    volumes:
+      - analytics-db-data:/var/lib/postgresql/data
+      - ./analytics-worker/sql/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - team-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d analytics_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
 volumes:
   purchase-db-data:
@@ -328,3 +369,4 @@ volumes:
   refund-service-db-data:
   fraud-db-data:
   caddy:
+  analytics-db-data:

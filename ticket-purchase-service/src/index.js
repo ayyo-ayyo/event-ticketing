@@ -80,9 +80,9 @@ async function connectEventCatalogService() {
 // Use this function for fetching events corresponding to the ticket
 async function fetchEvent(eventId) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 5000);
-  try {
-    const response = await fetch(`http://event-catalog-service:3001/events/${eventId}`, { signal: controller.signal });
+  const timeout = setTimeout(() => controller.abort(), 5000); // Timeout 5s;
+  try{
+    const response = await fetch(`http://event-catalog-service:3001/events/${eventId}?admin=true`, {signal: controller.signal});
     clearTimeout(timeout);
 
     if (!response.ok) {
@@ -289,6 +289,7 @@ async function createPurchase(req, res) {
     quantity,
     unitTicketCents,
   } = req.body;
+  const { admin } = req.query;
 
   if (!idempotencyKey) {
     return res.status(400).json({
@@ -488,14 +489,9 @@ async function createPurchase(req, res) {
         quantity: confirmedPurchase.quantity,
         unitTicketCents: confirmedPurchase.unit_ticket_cents,
       });
-      //Publish to analytics queue so the Analytics Worker can update sales metrics
-      const analyticsJob = JSON.stringify({
-        eventId: confirmedPurchase.event_id,
-        quantity: confirmedPurchase.quantity,
-        unitTicketCents: confirmedPurchase.unit_ticket_cents,
-      });
+      
       let purchaseQueued = true;
-      let analyticsQueued = true;
+      let analyticsQueued = false;
       try {
         await redisClient.lPush(PURCHASE_QUEUE_KEY, purchaseJob);
         console.log(
@@ -508,17 +504,25 @@ async function createPurchase(req, res) {
           enqueueErr.message
         );
       }
-      try {
-        await redisClient.lPush("analytics:queue", analyticsJob);
-        console.log(
-          `[ticket-purchase-service] Published analytics job for purchaseId=${confirmedPurchase.id}`
-        );
-      } catch (enqueueErr) {
-        analyticsQueued = false;
-        console.error(
-          "[ticket-purchase-service] Failed to enqueue analytics job:",
-          enqueueErr.message
-        );
+      if (!admin) {
+        //Publish to analytics queue so the Analytics Worker can update sales metrics
+        const analyticsJob = JSON.stringify({
+          eventId: confirmedPurchase.event_id,
+          quantity: confirmedPurchase.quantity,
+          unitTicketCents: confirmedPurchase.unit_ticket_cents,
+        });
+        try {
+          await redisClient.lPush("analytics:queue", analyticsJob);
+          analyticsQueued = true;
+          console.log(
+            `[ticket-purchase-service] Published analytics job for purchaseId=${confirmedPurchase.id}`
+          );
+        } catch (enqueueErr) {
+          console.error(
+            "[ticket-purchase-service] Failed to enqueue analytics job:",
+            enqueueErr.message
+          );
+        }
       }
       try {
         await redisClient.lPush("notification:queue", notificationJob);

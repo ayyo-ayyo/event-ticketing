@@ -8,7 +8,6 @@ const app = express();
 
 const PORT = process.env.PORT || 3007;
 const REDIS_URL = process.env.REDIS_URL;
-const TICKET_PURCHASE_SERVICE_URL = process.env.TICKET_PURCHASE_SERVICE_URL;
 
 const ANALYTICS_QUEUE = "analytics:queue";
 const DLQ = "analytics:dlq";
@@ -18,8 +17,18 @@ const newMetricsSql = fs.readFileSync(
   path.join(__dirname, "..", "sql", "new-metrics.sql"),
   "utf8"
 );
+const updateMetricsSql = fs.readFileSync(
+  path.join(__dirname, "..", "sql", "update-metrics.sql"),
+  "utf8"
+);
+
+const getMetricsSql = fs.readFileSync(
+  path.join(__dirname, "..", "sql", "get-metrics.sql"),
+  "utf8"
+);
+
 const updateReadMetricsSql = fs.readFileSync(
-  path.join(__dirname, "..", "sql", "update-read-metrics.sql"),
+  path.join(__dirname, "..", "sql", "update-event-read.sql"),
   "utf8"
 );
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -45,20 +54,18 @@ app.get("/health", async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`[analytics-worker] Listening on port ${PORT}`);
-});
+
 
 //Message validation
 
 function isValidMessage(msg) {
     return (
         msg &&
-        (typeof msg.eventId === "string" &&
-        typeof msg.read === "number") ||
-        (typeof msg.eventId === "string" &&
-        typeof msg.quantity === "number" &&
-        typeof msg.unitTicketCents === "number")
+        typeof msg.eventId === "string" &&
+        typeof msg.idempotencyKey === "string" &&
+        ((typeof msg.time === "string") ||
+        (typeof msg.quantity === "number" &&
+        typeof msg.unitTicketCents === "number"))
     );
 }
 
@@ -78,16 +85,26 @@ async function processMessage(raw) {
         await redisClient.lPush(DLQ, raw); // Move to DLQ for manual inspection
         return false; // Don't retry, message is invalid
     }
+    
+    const claimed = await redisClient.set(job.idempotencyKey, '1', { NX: true, EX: 86400 });
+
+    if (!claimed) {
+        console.log('duplicate skipped', job.eventId)
+        return true // Idempotency key already exists, skip processing but consider it successful to avoid retries
+    }
+    console.log(`[analytics-worker] Processing message for eventId=${job.eventId}, quantity=${job.quantity}, unitTicketCents=${job.unitTicketCents}, idempotencyKey=${job.idempotencyKey}`);
     // Process the valid message here
-    try {      
-        if (job.read) {
+    try {    
+        if (!job.quantity) {
         // Update read metrics in the database
             console.log(`[analytics-worker] Updating read metrics for eventId=${job.eventId}`);
-            await pool.query(updateReadMetricsSql, [job.eventId, 0, 0, job.read]);
+            await pool.query(updateReadMetricsSql, [job.eventId, new Date(job.time)]);
+            await pool.query(updateMetricsSql, [job.eventId, 0, 0, 1]);
         } else {
-            console.log(`[analytics-worker] Inserting new metrics for eventId=${job.eventId}`);
-            await pool.query(newMetricsSql, [job.eventId, job.quantity, job.unitTicketCents, 0]);
+            console.log(`[analytics-worker] Updating metrics for eventId=${job.eventId}`);
+            await pool.query(updateMetricsSql, [job.eventId, job.quantity, job.unitTicketCents, 0]);
         }
+        return true; // Message processed successfully
     } catch (error) {
         console.error("[analytics-worker] Failed to process message:", error.message);
         await redisClient.lPush(DLQ, raw); // Move to DLQ for manual inspection
@@ -100,7 +117,10 @@ async function processMessage(raw) {
 async function workerLoop() {
     while (true) {
         try {            
-            const raw = await redisClient.brPop(ANALYTICS_QUEUE, 0); // Block until a message is available
+            const raw = await redisClient.brPop(ANALYTICS_QUEUE, 5);
+            if (!raw) {
+                continue; // No message received, continue the loop
+            }
             const message = raw.element;
             const success = await processMessage(message);
             if (!success) {
