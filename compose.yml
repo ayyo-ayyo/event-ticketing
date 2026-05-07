@@ -277,7 +277,6 @@ services:
     environment:
       - DATABASE_URL=postgres://postgres:postgres@analytics-db:5432/analytics_db
       - REDIS_URL=redis://redis:6379
-      - EVENT_CATALOG_SERVICE_URL=http://event-catalog-service:3001
     depends_on:
       analytics-db:
         condition: service_healthy

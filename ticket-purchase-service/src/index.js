@@ -58,7 +58,7 @@ async function fetchEvent(eventId){
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 5000); // Timeout 5s;
   try{
-    const response = await fetch(`http://event-catalog-service:3001/events/${eventId}`, {signal: controller.signal});
+    const response = await fetch(`http://event-catalog-service:3001/events/${eventId}?admin=true`, {signal: controller.signal});
     clearTimeout(timeout);
 
     if(!response.ok){
@@ -207,6 +207,7 @@ app.post("/purchases", async (req, res) => {
     quantity,
     unitTicketCents,
   } = req.body;
+  const { admin } = req.query;
 
   if (!idempotencyKey) {
     return res.status(400).json({
@@ -369,16 +370,7 @@ app.post("/purchases", async (req, res) => {
         quantity: confirmedPurchase.quantity,
         unitTicketCents: confirmedPurchase.unit_ticket_cents,
       });
-      //Publish to analytics queue so the Analytics Worker can update sales metrics
-      const analyticsJob = JSON.stringify({
-        eventId: confirmedPurchase.event_id,
-        quantity: confirmedPurchase.quantity,
-        unitTicketCents: confirmedPurchase.unit_ticket_cents,
-      });
-      await redisClient.lPush("analytics:queue", analyticsJob);
-      console.log(
-        `[ticket-purchase-service] Published analytics job for purchaseId=${confirmedPurchase.id}`
-      );
+      
       try {
         await redisClient.lPush("notification:queue", notificationJob);
         console.log(
@@ -393,6 +385,21 @@ app.post("/purchases", async (req, res) => {
           notificationQueued: false,
         });
       }
+      if (!admin) { //Publish to analytics queue so the Analytics Worker can update sales metrics
+      const analyticsJob = JSON.stringify({
+        eventId: confirmedPurchase.event_id,
+        quantity: confirmedPurchase.quantity,
+        unitTicketCents: confirmedPurchase.unit_ticket_cents,
+        idempotencyKey: idempotencyKey,
+      });
+      try {await redisClient.lPush("analytics:queue", analyticsJob);
+      console.log(
+        `[ticket-purchase-service] Published analytics job for purchaseId=${confirmedPurchase.id}`
+      );}
+      catch (enqueueErr) {
+        console.error("[ticket-purchase-service] Failed to enqueue analytics job:", enqueueErr.message);
+        // Not critical enough to fail the request, just log the error
+      }}
 
       return res.status(201).json({
         message: "Purchase created and payment processed",
