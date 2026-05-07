@@ -2,12 +2,17 @@
 
 **Sprint:** 4 — Replication, Scaling, and Polish  
 **Tag:** `sprint-4`  
-**Submitted:** [date, before 05.05 class]
+**Submitted:** [date, before 05.07 class]
 
 ---
 
 ## What We Built
 
+The 3 core services event-catalog-service, ticket-purchase-service and payment-service are replicated.
+
+Using caddy, the repllicas successfully distribute the load evenly
+
+There was also lots of polish to the DLQs and the refund service revolving around seats available among other fixes
 [Which services are replicated? How does load balancing work? What polish work was completed?]
 
 ---
@@ -17,6 +22,7 @@
 | Team Member | What They Delivered | Key Commits |
 | ----------- | ------------------- | ----------- |
 | Ayo      | analytics service | 965bc0ff0c49632626e4703a0e22736e7e6c8403, 9d324d504d48e0aaf6adea724a8959dc636f83a1 |
+| Sean R  | Caddy to core services | f7d99c5db2e416ee635c93ef6921e4f7281ebfd2 |
 | [Name]      | | |
 | [Name]      | | |
 
@@ -31,7 +37,27 @@ docker compose up --scale [service-name]=3 --scale [other-service]=2
 After startup:
 
 ```
-[Paste docker compose ps output here showing all replicas as (healthy)]
+NAME                                        IMAGE                                     COMMAND                  SERVICE                   CREATED          STATUS                    PORTS
+event-catalog-db                            postgres:16                               "docker-entrypoint.s…"   event-catalog-db          43 seconds ago   Up 41 seconds (healthy)   5432/tcp
+event-ticketing-caddy-1                     caddy:2-alpine                            "caddy run --config …"   caddy                     42 seconds ago   Up 27 seconds             0.0.0.0:8080->80/tcp, [::]:8080->80/tcp
+event-ticketing-event-catalog-service-1     event-ticketing-event-catalog-service     "docker-entrypoint.s…"   event-catalog-service     42 seconds ago   Up 34 seconds (healthy)   3001/tcp
+event-ticketing-event-catalog-service-2     event-ticketing-event-catalog-service     "docker-entrypoint.s…"   event-catalog-service     42 seconds ago   Up 34 seconds (healthy)   3001/tcp
+event-ticketing-event-catalog-service-3     event-ticketing-event-catalog-service     "docker-entrypoint.s…"   event-catalog-service     42 seconds ago   Up 34 seconds (healthy)   3001/tcp
+event-ticketing-payment-service-1           event-ticketing-payment-service           "docker-entrypoint.s…"   payment-service           42 seconds ago   Up 34 seconds (healthy)   3003/tcp
+event-ticketing-payment-service-2           event-ticketing-payment-service           "docker-entrypoint.s…"   payment-service           42 seconds ago   Up 35 seconds (healthy)   3003/tcp
+event-ticketing-payment-service-3           event-ticketing-payment-service           "docker-entrypoint.s…"   payment-service           42 seconds ago   Up 34 seconds (healthy)   3003/tcp
+event-ticketing-ticket-purchase-service-1   event-ticketing-ticket-purchase-service   "docker-entrypoint.s…"   ticket-purchase-service   42 seconds ago   Up 28 seconds (healthy)   3002/tcp
+event-ticketing-ticket-purchase-service-2   event-ticketing-ticket-purchase-service   "docker-entrypoint.s…"   ticket-purchase-service   42 seconds ago   Up 28 seconds (healthy)   3002/tcp
+event-ticketing-ticket-purchase-service-3   event-ticketing-ticket-purchase-service   "docker-entrypoint.s…"   ticket-purchase-service   42 seconds ago   Up 27 seconds (healthy)   3002/tcp
+fraud-db                                    postgres:16                               "docker-entrypoint.s…"   fraud-db                  43 seconds ago   Up 41 seconds (healthy)   5432/tcp
+fraud-detection-worker                      event-ticketing-fraud-detection-worker    "docker-entrypoint.s…"   fraud-detection-worker    42 seconds ago   Up 34 seconds (healthy)   0.0.0.0:3007->3007/tcp, [::]:3007->3007/tcp
+holmes                                      event-ticketing-holmes                    "sleep infinity"         holmes                    43 seconds ago   Up 41 seconds             
+notification-service                        event-ticketing-notification-service      "docker-entrypoint.s…"   notification-service      42 seconds ago   Up 35 seconds (healthy)   0.0.0.0:3004->3004/tcp, [::]:3004->3004/tcp
+purchase-db                                 postgres:16                               "docker-entrypoint.s…"   purchase-db               43 seconds ago   Up 41 seconds (healthy)   5432/tcp
+redis                                       redis:7                                   "docker-entrypoint.s…"   redis                     43 seconds ago   Up 41 seconds (healthy)   6379/tcp
+refund-service                              event-ticketing-refund-service            "docker-entrypoint.s…"   refund-service            42 seconds ago   Up 22 seconds (healthy)   0.0.0.0:3006->3006/tcp, [::]:3006->3006/tcp
+refund-service-db                           postgres:16                               "docker-entrypoint.s…"   refund-service-db         43 seconds ago   Up 41 seconds (healthy)   5432/tcp
+waitlist-worker                             event-ticketing-waitlist-worker           "docker-entrypoint.s…"   waitlist-worker           42 seconds ago   Up 22 seconds (healthy)   0.0.0.0:3005->3005/tcp, [::]:3005->3005/tcp
 ```
 
 ---
@@ -181,3 +207,4 @@ After restart — `docker compose ps`:
 ---
 
 ## Blockers and Lessons Learned
+
