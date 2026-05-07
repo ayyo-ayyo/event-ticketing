@@ -1,4 +1,4 @@
-# Sprint 4 Report — [Team Name]
+# Sprint 4 Report — Group 9
 
 **Sprint:** 4 — Replication, Scaling, and Polish  
 **Tag:** `sprint-4`  
@@ -16,7 +16,7 @@
 
 | Team Member | What They Delivered | Key Commits |
 | ----------- | ------------------- | ----------- |
-| [Name]      | | |
+| Ayo      | analytics service | 965bc0ff0c49632626e4703a0e22736e7e6c8403, 9d324d504d48e0aaf6adea724a8959dc636f83a1 |
 | [Name]      | | |
 | [Name]      | | |
 

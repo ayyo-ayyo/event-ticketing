@@ -510,6 +510,7 @@ async function createPurchase(req, res) {
           eventId: confirmedPurchase.event_id,
           quantity: confirmedPurchase.quantity,
           unitTicketCents: confirmedPurchase.unit_ticket_cents,
+          idempotencyKey: `analytics-${confirmedPurchase.id}`,
         });
         try {
           await redisClient.lPush("analytics:queue", analyticsJob);

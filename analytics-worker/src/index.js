@@ -6,7 +6,7 @@ const { Pool } = require("pg");
 
 const app = express();
 
-const PORT = process.env.PORT || 3007;
+const PORT = process.env.PORT || 3008;
 const REDIS_URL = process.env.REDIS_URL;
 
 const ANALYTICS_QUEUE = "analytics:queue";
@@ -101,9 +101,10 @@ async function processMessage(raw) {
             await pool.query(updateReadMetricsSql, [job.eventId, new Date(job.time)]);
             await pool.query(updateMetricsSql, [job.eventId, 0, 0, 1]);
         } else {
-            console.log(`[analytics-worker] Updating metrics for eventId=${job.eventId}`);
+            console.log(`[analytics-worker] Updating total metrics for eventId=${job.eventId}`);
             await pool.query(updateMetricsSql, [job.eventId, job.quantity, job.unitTicketCents, 0]);
         }
+        console.log(`[analytics-worker] Successfully processed message for eventId=${job.eventId}`);
         return true; // Message processed successfully
     } catch (error) {
         console.error("[analytics-worker] Failed to process message:", error.message);
