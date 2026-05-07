@@ -22,7 +22,7 @@ There was also lots of polish to the DLQs and the refund service revolving aroun
 | Team Member | What They Delivered | Key Commits |
 | ----------- | ------------------- | ----------- |
 | Sean R  | Caddy to core services | f7d99c5db2e416ee635c93ef6921e4f7281ebfd2 |
-| [Name]      | | |
+| Derek B | Fixed seats available and tested replicas with --scale command | 869fd114c060f846342d6415f98dda85713ada22 |
 | [Name]      | | |
 
 ---
