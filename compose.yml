@@ -76,14 +76,14 @@ services:
 
   ticket-purchase-service:
     build: ./ticket-purchase-service
-    container_name: ticket-purchase-service
+    #container_name: ticket-purchase-service
     restart: unless-stopped
-    ports:
-      - "3002:3002"
+    #ports:
+    #  - "3002:3002"
     networks:
       - team-net
     environment:
-      - PORT=3002
+    #  - PORT=3002
       - DATABASE_URL=postgres://postgres:postgres@purchase-db:5432/purchase_db
       - REDIS_URL=redis://redis:6379
       - PAYMENT_SERVICE_URL=http://payment-service:3003
