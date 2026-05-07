@@ -6,30 +6,50 @@
 <meta charset="utf-8">
 <title>Venues and Events</title>
 <style>
+
+body {
+    margin: 0;
+    padding: 0;
+}
+
 h1 {
-    font-family: Trebuchet;
+    font-family: 'Trebuchet MS', Trebuchet, sans-serif;
     text-align: center;
     background-color: #FF765C;
     color: #ffffff; 
-    padding: 10px;
+    padding: 10px 10px 10px 10px; 
+    margin: 0;                   
+    width: 100%;  
+    box-sizing: border-box;   
   }
 h3 {
-    font: Trebuchet;
+    font-family: 'Trebuchet MS', Trebuchet, sans-serif;
     text-align: center;
     background-color: #FF765C;
     color: white;
     padding: 10px;
+    margin-top: 30px;
+    margin-left: 75px;
+    margin-right: 75px;
+    margin-bottom: 0;
 }
 table {
-    margin-left: auto;
-    margin-right: auto;
-    font: Trebuchet;
+    margin-left: 75px;
+    margin-right: 75px;
+    margin-bottom: 20px;
+    margin-top: 0;
+    width: calc(100% - 150px);
+    font-family: 'Trebuchet MS', Trebuchet, sans-serif;
     text-align: center;
     background-color: #ffffff;
+    box-sizing: border-box;
 }
 button  {
-    font: Trebuchet;
+    font-family: 'Trebuchet MS', Trebuchet, sans-serif;
     background-color: rgb(255, 255, 139);
+    border: 1px solid #aaa;
+    padding: 6px 18px;
+    cursor: pointer;
 }
 
 </style>
@@ -41,6 +61,14 @@ button  {
 </body>
 
 <script>
+
+function fmtDate(iso) {
+  if (!iso) return '-';
+  return new Date(iso).toLocaleDateString('en-US', {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+  });
+}
+    
 async function eventsFunc(){
     const events = await fetch('/events');
     const dataE = await events.json();
@@ -89,10 +117,10 @@ async function eventsFunc(){
                     <tr>
                         <td>${event.id}</td>
                         <td>${event.title}</td>
-                        <td>${event.date}</td>
+                        <td>${fmtDate(event.date)}</td>
                         <td>$${(event.basePriceCents / 100).toFixed(2)}</td>
                         <td>${event.seats_available}</td>
-                        <td><button type="button">Purchase</button></td>
+                        <td><button type="button" onclick="window.location.href='/purchase.html?eventId=${event.id}'">Purchase</button></td>
                     </tr>
                 `).join('')}
             </tbody>

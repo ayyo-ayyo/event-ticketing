@@ -52,14 +52,14 @@ services:
 
   event-catalog-service:
     build: ./event-catalog-service
-    container_name: event-catalog-service
+    #container_name: event-catalog-service
     restart: unless-stopped
-    ports:
-      - "3001:3001"
+    #ports:
+    #  - "3001:3001"
     networks:
       - team-net
     environment:
-      - PORT=3001
+    #  - PORT=3001
       - DATABASE_URL=postgres://catalog:catalog@event-catalog-db:5432/event_catalog
       - REDIS_URL=redis://redis:6379
     depends_on:
@@ -68,7 +68,7 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3001/health"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3001/health"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -76,14 +76,14 @@ services:
 
   ticket-purchase-service:
     build: ./ticket-purchase-service
-    container_name: ticket-purchase-service
+    #container_name: ticket-purchase-service
     restart: unless-stopped
-    ports:
-      - "3002:3002"
+    #ports:
+    #  - "3002:3002"
     networks:
       - team-net
     environment:
-      PORT: 3002
+    #  PORT: 3002
       DATABASE_URL: postgres://postgres:postgres@purchase-db:5432/purchase_db
       REDIS_URL: redis://redis:6379
       PAYMENT_SERVICE_URL: http://payment-service:3003
@@ -104,14 +104,14 @@ services:
 
   payment-service:
     build: ./payment-service
-    container_name: payment-service
+    #container_name: payment-service
     restart: unless-stopped
-    ports:
-      - "3003:3003"
+    #ports:
+    #  - "3003:3003"
     networks:
       - team-net
     environment:
-      - PORT=3003
+    #  - PORT=3003
       - REDIS_URL=redis://redis:6379
     depends_on:
       redis:
@@ -242,6 +242,49 @@ services:
       timeout: 3s
       retries: 5
 
+  fraud-detection-worker:
+    build: ./fraud-detection-worker
+    container_name: fraud-detection-worker
+    restart: unless-stopped
+    ports:
+      - "3007:3007"
+    networks:
+      - team-net
+    environment:
+      PORT: 3007
+      DATABASE_URL: postgres://fraud:fraud@fraud-db:5432/fraud_db
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      fraud-db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3007/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  fraud-db:
+    image: postgres:16
+    container_name: fraud-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: fraud
+      POSTGRES_PASSWORD: fraud
+      POSTGRES_DB: fraud_db
+    volumes:
+      - fraud-db-data:/var/lib/postgresql/data
+      - ./fraud-detection-worker/sql/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - team-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fraud -d fraud_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   waitlist-worker:
     build: ./waitlist-worker
     container_name: waitlist-worker
@@ -266,6 +309,18 @@ services:
       retries: 5
       start_period: 15s
 
+  caddy:
+    image: caddy:2-alpine
+    depends_on:
+      - event-catalog-service
+      - ticket-purchase-service
+      - payment-service
+    ports:
+      - "8080:80"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile
+    networks:
+      - team-net
   analytics-worker:
     build: ./analytics-worker
     container_name: analytics-worker
@@ -312,4 +367,6 @@ volumes:
   purchase-db-data:
   event-catalog-db-data:
   refund-service-db-data:
+  fraud-db-data:
+  caddy:
   analytics-db-data:

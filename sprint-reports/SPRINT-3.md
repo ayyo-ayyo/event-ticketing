@@ -17,9 +17,12 @@ We added the k6 poison pills test, implemented the fraud worker w/ DLQ handling,
 | ----------- | ------------------- | ----------- |
 | Ayo      | added metrics table, purchase and browse events are pushed to analytics queue, started code for worker to process them, DLQ implemented but not working yet | 88718283194958a0ddc63b87d9a4a639eea714cc |
 | Jimmy Jiang | implement fraud detection worker, db, and dlq | 7ab67b1c6b995221d309482031f26052932c3038 |
-| [Name]      | | |
-| [Name]      | | |
-
+| Lucky Kovvuri      |created payment service frontend user endpoint | 75333c65f7b9c865db01ff76ea94d32e61e03ffc |
+| Derek B | Added the k6 poison pill resilience test | 6c75a4fcff1ae48cb48a75e8dc63743231f97ccb |
+| Mateus Andrade | Implemented graceful failures | ed6bc137417e54fe611a874d612031bb8d3a144d |
+1dc3bbedf2b831a165606b2d8528039d05ca2fc2 |
+| Sean R   | Implemented frontend page for events and venues which updates with new events | 988413a839a27e47b2639c7d2a971c54bca0fdd7, 4f7eea264602b094b29aa720932e11fb78ce4248 |
+| Maycol M | worked on adding a dlq for the ticket-purchase-service, still working planning to go to sprint 4|
 ---
 
 ## What Is Working

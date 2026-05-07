@@ -186,7 +186,7 @@ curl -X POST http://localhost:3001/venues \
 docker compose up --build
 
 # Start with service replicas (Sprint 4)
-docker compose up --scale your-service=3
+docker compose up --build --scale event-catalog-service=3 --scale ticket-purchase-service=3 --scale payment-service=3
 
 # Verify all services are healthy
 docker compose ps
@@ -537,6 +537,26 @@ curl -X POST http://localhost:3002/purchases \
     "message": "Payment declined"
   }
 }
+```
+
+### Ticket Purchase Service DLQ
+
+This dead letter queue is only for the Ticket Purchase Service purchase worker
+
+- Normal TPS purchase queue: `tps:purchase:queue`
+- TPS purchase dead letter queue: `tps:purchase:dlq`
+
+Inspect the TPS DLQ with Redis CLI:
+
+```bash
+redis-cli LRANGE tps:purchase:dlq 0 -1
+```
+
+Manually add a poison-pill test message:
+
+```bash
+redis-cli LPUSH tps:purchase:queue '{"bad": "message"}'
+redis-cli LRANGE tps:purchase:dlq 0 -1
 ```
 
 ---
