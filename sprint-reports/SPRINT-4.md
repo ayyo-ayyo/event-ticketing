@@ -21,6 +21,7 @@ There was also lots of polish to the DLQs and the refund service revolving aroun
 
 | Team Member | What They Delivered | Key Commits |
 | ----------- | ------------------- | ----------- |
+| Ayo      | analytics service | 965bc0ff0c49632626e4703a0e22736e7e6c8403, 9d324d504d48e0aaf6adea724a8959dc636f83a1 |
 | Sean R  | Caddy to core services | f7d99c5db2e416ee635c93ef6921e4f7281ebfd2 |
 | Derek B | Fixed seats available and tested replicas with --scale command | 869fd114c060f846342d6415f98dda85713ada22 |
 | [Name]      | | |

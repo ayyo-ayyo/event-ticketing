@@ -83,10 +83,10 @@ services:
     networks:
       - team-net
     environment:
-    #  PORT: 3002
-      DATABASE_URL: postgres://postgres:postgres@purchase-db:5432/purchase_db
-      REDIS_URL: redis://redis:6379
-      PAYMENT_SERVICE_URL: http://payment-service:3003
+    #  - PORT=3002
+      - DATABASE_URL=postgres://postgres:postgres@purchase-db:5432/purchase_db
+      - REDIS_URL=redis://redis:6379
+      - PAYMENT_SERVICE_URL=http://payment-service:3003
     depends_on:
       purchase-db:
         condition: service_healthy
@@ -326,7 +326,7 @@ services:
     container_name: analytics-worker
     restart: unless-stopped
     ports:
-      - "3007:3007"
+      - "3008:3008"
     networks:
       - team-net
     environment:
@@ -338,7 +338,7 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3007/health"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:3008/health"]
       interval: 10s
       timeout: 5s
       retries: 3
