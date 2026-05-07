@@ -24,8 +24,8 @@ There was also lots of polish to the DLQs and the refund service revolving aroun
 | Ayo      | analytics service | 965bc0ff0c49632626e4703a0e22736e7e6c8403, 9d324d504d48e0aaf6adea724a8959dc636f83a1 |
 | Sean R  | Caddy to core services | f7d99c5db2e416ee635c93ef6921e4f7281ebfd2 |
 | Derek B | Fixed seats available and tested replicas with --scale command | 869fd114c060f846342d6415f98dda85713ada22 |
-| [Name]      | | |
-
+| Mateus A |Made K6 replica test | 2dd294629a33c11da8004c79b27a4c20a44ed2e4 |
+| Maycol M | DLQ for tps | 676315d5cc6dcd11f6e01350d0c32065de430859 | fa00dca419f3e34532a296ed088c5621145f2935 | a6aff7502077232b4aebdc7828052dbd0c67f0ef | 36618d6f067979a36f505335687f5838b119b7af |
 ---
 
 ## Starting the System with Replicas
