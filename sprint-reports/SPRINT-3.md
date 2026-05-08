@@ -23,6 +23,7 @@ We added the k6 poison pills test, implemented the fraud worker w/ DLQ handling,
 1dc3bbedf2b831a165606b2d8528039d05ca2fc2 |
 | Sean R   | Implemented frontend page for events and venues which updates with new events | 988413a839a27e47b2639c7d2a971c54bca0fdd7, 4f7eea264602b094b29aa720932e11fb78ce4248 |
 | Maycol M | worked on adding a dlq for the ticket-purchase-service, still working planning to go to sprint 4|
+| Brian N | built the purchase screen frontend, event lookup, quantity picker, submitting purchases with idempotency keys, plus confirmation and error states. also added /ui/events/:id and /ui/refunds proxy routes on the ticket purchase service so the browser doesn't have to make cross-origin calls | ad8bc27d2754410c15548323553138c5bad3a954 |
 ---
 
 ## What Is Working

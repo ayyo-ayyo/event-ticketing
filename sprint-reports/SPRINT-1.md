@@ -18,7 +18,7 @@ We've laid the foundation of the three core services of the event ticketing app,
 | ----------- | ------------------------------------------------------- | ---------------------- |
 | Lucky K      | Customized k6 load test script and added synthesized baseline results into Sprint 1 Report    | 21e0942 |
 | Jimmy J | Implemented synchronous service call from ticket purchase service to payment service | 20efa35b1bec690849c37d2be82d98e7a54bb6bf |
-| [Name]      | [e.g. restaurant-service, synchronous call integration] |                        |
+| Brian N     | set up the payment service from scratch, /health and /payments endpoints, added it to compose.yml with a healthcheck | e4634d52c415f448270ee792ba0d6ad126ad6d5f |
 | Sean R      | Completed service to service HTTP call from Ticket Purchasing service to Event Catalog Service | 27169c833d36aae729a48b9df60346d68834113f |
 | Maycol M      | Finish setting the ticket purshcase service and made db for it           |     5dcf088a81be18773fa7281984e8c26e1cabd49e, and 1beb13e7a1f92d34073a39de9840465d604623ef                   |
 

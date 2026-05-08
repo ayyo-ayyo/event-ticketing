@@ -28,6 +28,7 @@ There was also lots of polish to the DLQs and the refund service revolving aroun
 | Maycol M | DLQ for tps | 676315d5cc6dcd11f6e01350d0c32065de430859 | fa00dca419f3e34532a296ed088c5621145f2935 | a6aff7502077232b4aebdc7828052dbd0c67f0ef | 36618d6f067979a36f505335687f5838b119b7af |
 | Lucky K | wrote and ran and analyzed k6 scaling test | cc66a1bad400c6b82c236d32aacdfe25bb2e4e55
 | Jimmy J | connected frontends | f064953a0e051a758ef5fd68c978b40e7034b026 |
+| Brian N | more purchase screen polish, made sure the catalog → purchase → confirmation flow works end-to-end against the replicated services through caddy | ad8bc27d2754410c15548323553138c5bad3a954 |
 ---
 
 ## Starting the System with Replicas
