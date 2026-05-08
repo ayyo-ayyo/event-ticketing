@@ -3,6 +3,10 @@ const path = require("path");
 const { Pool } = require("pg");
 const { createClient } = require("redis");
 const { startPurchaseWorker } = require("./purchase-worker");
+const {
+  PURCHASE_QUEUE_KEY,
+  PURCHASE_DLQ_KEY,
+} = require("./purchase-queue");
 
 const app = express();
 app.use(express.json());
@@ -11,7 +15,7 @@ app.use(express.static(path.join(__dirname, "public")));
 const PORT = process.env.PORT || 3002;
 const DATABASE_URL = process.env.DATABASE_URL;
 const REDIS_URL = process.env.REDIS_URL;
-const PAYMENT_SERVICE_URL = process.env.PAYMENT_SERVICE_URL;
+const PAYMENT_SERVICE_URL = process.env.PAYMENT_SERVICE_URL || "http://payment-service:3003";
 const REFUND_SERVICE_URL = process.env.REFUND_SERVICE_URL || "http://refund-service:3006";
 const POSTGRES_UNIQUE_VIOLATION = "23505";
 const SEAT_RELEASED_CHANNEL = "seat.released";
@@ -76,9 +80,9 @@ async function connectEventCatalogService() {
 // Use this function for fetching events corresponding to the ticket
 async function fetchEvent(eventId) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 5000);
-  try {
-    const response = await fetch(`http://event-catalog-service:3001/events/${eventId}`, { signal: controller.signal });
+  const timeout = setTimeout(() => controller.abort(), 5000); // Timeout 5s;
+  try{
+    const response = await fetch(`http://event-catalog-service:3001/events/${eventId}?admin=true`, {signal: controller.signal});
     clearTimeout(timeout);
 
     if (!response.ok) {
@@ -106,12 +110,13 @@ async function adjustEventSeats(event, eventId, quantity) {
     `Adjusting seats for eventId ${eventId} by ${quantity}. Current seats available: ${event.seats_available}`
   );
   try {
+    const nextSeatsAvailable = event.seats_available + quantity;
     const updateResponse = await fetch(`http://event-catalog-service:3001/events/${eventId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         ...event,
-        seats_available: event.seats_available + quantity,
+        seats_available: nextSeatsAvailable,
       }),
       signal: controller.signal,
     });
@@ -119,6 +124,7 @@ async function adjustEventSeats(event, eventId, quantity) {
     if (!updateResponse.ok) {
       throw new Error(`Failed to update seats for eventId: ${eventId}`);
     }
+    event.seats_available = nextSeatsAvailable;
     return true;
   } catch (updateErr) {
     console.error("Failed to update seats in Event Catalog Service:", updateErr.message);
@@ -170,9 +176,11 @@ app.get("/", (req, res) => {
   });
 });
 
-app.get("/health", async (req, res) => {
+async function getHealth(req, res) {
   let database = "down";
   let redis = "down";
+  let queueDepth = null;
+  let dlqDepth = null;
 
   try {
     await pool.query("SELECT 1");
@@ -183,6 +191,8 @@ app.get("/health", async (req, res) => {
 
   try {
     await redisClient.ping();
+    queueDepth = await redisClient.lLen(PURCHASE_QUEUE_KEY);
+    dlqDepth = await redisClient.lLen(PURCHASE_DLQ_KEY);
     redis = "up";
   } catch (err) {
     console.error("Redis health check failed:", err.message);
@@ -195,8 +205,12 @@ app.get("/health", async (req, res) => {
     service: "ticket-purchase-service",
     database,
     redis,
+    queueDepth,
+    dlqDepth,
   });
-});
+}
+
+app.get("/health", getHealth);
 
 app.get("/purchases/:id", async (req, res) => {
   const { id } = req.params;
@@ -275,6 +289,7 @@ async function createPurchase(req, res) {
     quantity,
     unitTicketCents,
   } = req.body;
+  const { admin } = req.query;
 
   if (!idempotencyKey) {
     return res.status(400).json({
@@ -459,6 +474,14 @@ async function createPurchase(req, res) {
 
     if (paymentResponse.ok) {
       const confirmedPurchase = updatedPurchase.rows[0];
+      const purchaseJob = JSON.stringify({
+        purchaseId: confirmedPurchase.id,
+        userId: confirmedPurchase.user_id,
+        eventId: confirmedPurchase.event_id,
+        quantity: confirmedPurchase.quantity,
+        idempotencyKey: confirmedPurchase.idempotency_key,
+        createdAt: confirmedPurchase.created_at,
+      });
       const notificationJob = JSON.stringify({
         purchaseId: confirmedPurchase.id,
         userId: confirmedPurchase.user_id,
@@ -466,24 +489,41 @@ async function createPurchase(req, res) {
         quantity: confirmedPurchase.quantity,
         unitTicketCents: confirmedPurchase.unit_ticket_cents,
       });
-      //Publish to analytics queue so the Analytics Worker can update sales metrics
-      const analyticsJob = JSON.stringify({
-        eventId: confirmedPurchase.event_id,
-        quantity: confirmedPurchase.quantity,
-        unitTicketCents: confirmedPurchase.unit_ticket_cents,
-      });
-      let analyticsQueued = true;
+      
+      let purchaseQueued = true;
+      let analyticsQueued = false;
       try {
-        await redisClient.lPush("analytics:queue", analyticsJob);
+        await redisClient.lPush(PURCHASE_QUEUE_KEY, purchaseJob);
         console.log(
-          `[ticket-purchase-service] Published analytics job for purchaseId=${confirmedPurchase.id}`
+          `[ticket-purchase-service] Published TPS purchase job for purchaseId=${confirmedPurchase.id}`
         );
       } catch (enqueueErr) {
-        analyticsQueued = false;
+        purchaseQueued = false;
         console.error(
-          "[ticket-purchase-service] Failed to enqueue analytics job:",
+          "[ticket-purchase-service] Failed to enqueue TPS purchase job:",
           enqueueErr.message
         );
+      }
+      if (!admin) {
+        //Publish to analytics queue so the Analytics Worker can update sales metrics
+        const analyticsJob = JSON.stringify({
+          eventId: confirmedPurchase.event_id,
+          quantity: confirmedPurchase.quantity,
+          unitTicketCents: confirmedPurchase.unit_ticket_cents,
+          idempotencyKey: `analytics-${confirmedPurchase.id}`,
+        });
+        try {
+          await redisClient.lPush("analytics:queue", analyticsJob);
+          analyticsQueued = true;
+          console.log(
+            `[ticket-purchase-service] Published analytics job for purchaseId=${confirmedPurchase.id}`
+          );
+        } catch (enqueueErr) {
+          console.error(
+            "[ticket-purchase-service] Failed to enqueue analytics job:",
+            enqueueErr.message
+          );
+        }
       }
       try {
         await redisClient.lPush("notification:queue", notificationJob);
@@ -496,6 +536,7 @@ async function createPurchase(req, res) {
           message: "Purchase created and payment processed, but notification queue is unavailable",
           purchase: confirmedPurchase,
           payment: paymentResult,
+          purchaseQueued,
           analyticsQueued,
           notificationQueued: false,
         });
@@ -523,6 +564,7 @@ async function createPurchase(req, res) {
           : "Purchase created and payment processed, but analytics queue is unavailable",
         purchase: confirmedPurchase,
         payment: paymentResult,
+        ...(purchaseQueued ? {} : { purchaseQueued: false }),
         ...(analyticsQueued ? {} : { analyticsQueued: false }),
       });
     } else {
@@ -589,6 +631,7 @@ module.exports = {
   redisWorkerClient,
   startServer,
   createPurchase,
+  getHealth,
   getUiEvent,
   postUiRefund,
   fetchEvent,

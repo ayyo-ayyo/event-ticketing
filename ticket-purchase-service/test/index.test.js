@@ -5,9 +5,11 @@ const {
   pool,
   redisClient,
   createPurchase,
+  getHealth,
   getUiEvent,
   postUiRefund,
 } = require("../src/index");
+const { PURCHASE_QUEUE_KEY } = require("../src/purchase-queue");
 
 function createResponseDouble() {
   return {
@@ -51,6 +53,81 @@ test("GET /ui/events/:id proxies event payload", async () => {
     });
   } finally {
     global.fetch = originalFetch;
+  }
+});
+
+test("GET /health includes TPS queue and DLQ depths", async () => {
+  const originalQuery = pool.query;
+  const originalPing = redisClient.ping;
+  const originalLLen = redisClient.lLen;
+
+  pool.query = async (sql) => {
+    assert.equal(sql, "SELECT 1");
+    return { rows: [{ "?column?": 1 }] };
+  };
+  redisClient.ping = async () => "PONG";
+  redisClient.lLen = async (key) => {
+    if (key === "tps:purchase:queue") {
+      return 7;
+    }
+    if (key === "tps:purchase:dlq") {
+      return 2;
+    }
+    throw new Error(`Unexpected Redis key: ${key}`);
+  };
+
+  try {
+    const res = createResponseDouble();
+
+    await getHealth({}, res);
+
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(res.body, {
+      status: "healthy",
+      service: "ticket-purchase-service",
+      database: "up",
+      redis: "up",
+      queueDepth: 7,
+      dlqDepth: 2,
+    });
+  } finally {
+    pool.query = originalQuery;
+    redisClient.ping = originalPing;
+    redisClient.lLen = originalLLen;
+  }
+});
+
+test("GET /health leaves queue depths null when Redis is unavailable", async () => {
+  const originalQuery = pool.query;
+  const originalPing = redisClient.ping;
+  const originalLLen = redisClient.lLen;
+
+  pool.query = async () => ({ rows: [{ "?column?": 1 }] });
+  redisClient.ping = async () => {
+    throw new Error("redis down");
+  };
+  redisClient.lLen = async () => {
+    throw new Error("lLen should not run when ping fails");
+  };
+
+  try {
+    const res = createResponseDouble();
+
+    await getHealth({}, res);
+
+    assert.equal(res.statusCode, 503);
+    assert.deepEqual(res.body, {
+      status: "unhealthy",
+      service: "ticket-purchase-service",
+      database: "up",
+      redis: "down",
+      queueDepth: null,
+      dlqDepth: null,
+    });
+  } finally {
+    pool.query = originalQuery;
+    redisClient.ping = originalPing;
+    redisClient.lLen = originalLLen;
   }
 });
 
@@ -165,6 +242,227 @@ test("POST /ui/refunds returns 502 when refund service is unavailable", async ()
     });
   } finally {
     global.fetch = originalFetch;
+  }
+});
+
+test("createPurchase publishes confirmed purchases to the TPS purchase queue", async () => {
+  const originalQuery = pool.query;
+  const originalFetch = global.fetch;
+  const originalLPush = redisClient.lPush;
+
+  const lPushCalls = [];
+  const insertedPurchase = {
+    id: 101,
+    user_id: "user-1",
+    event_id: "event-1",
+    quantity: 2,
+    unit_ticket_cents: 5000,
+    reservation_status: "reserved",
+    payment_status: "pending",
+    idempotency_key: "idem-queue-1",
+    created_at: "2026-05-05T12:00:00.000Z",
+  };
+  const confirmedPurchase = {
+    ...insertedPurchase,
+    reservation_status: "confirmed",
+    payment_status: "paid",
+  };
+
+  pool.query = async (sql, params) => {
+    if (sql.includes("INSERT INTO purchases")) {
+      assert.deepEqual(params, [
+        "user-1",
+        "event-1",
+        2,
+        5000,
+        "reserved",
+        "pending",
+        "idem-queue-1",
+      ]);
+      return { rows: [insertedPurchase] };
+    }
+
+    if (sql.includes("UPDATE purchases")) {
+      assert.deepEqual(params, ["paid", "confirmed", 101]);
+      return { rows: [confirmedPurchase] };
+    }
+
+    throw new Error(`Unexpected query: ${sql}`);
+  };
+
+  global.fetch = async (url, options = {}) => {
+    if (url === "http://event-catalog-service:3001/events/event-1" && !options.method) {
+      return {
+        ok: true,
+        async json() {
+          return {
+            event: {
+              id: "event-1",
+              seats_available: 10,
+            },
+          };
+        },
+      };
+    }
+
+    if (url === "http://event-catalog-service:3001/events/event-1" && options.method === "PUT") {
+      assert.equal(JSON.parse(options.body).seats_available, 8);
+      return {
+        ok: true,
+      };
+    }
+
+    if (url === "http://payment-service:3003/payments") {
+      assert.equal(options.method, "POST");
+      assert.deepEqual(JSON.parse(options.body), { purchaseId: 101 });
+      return {
+        ok: true,
+        async json() {
+          return {
+            status: "success",
+            purchaseId: 101,
+            message: "Payment processed",
+          };
+        },
+      };
+    }
+
+    throw new Error(`Unexpected fetch: ${url}`);
+  };
+
+  redisClient.lPush = async (key, value) => {
+    lPushCalls.push({ key, value });
+  };
+
+  const req = {
+    header(name) {
+      if (name === "Idempotency-Key") {
+        return "idem-queue-1";
+      }
+      return undefined;
+    },
+    body: {
+      userId: "user-1",
+      eventId: "event-1",
+      quantity: 2,
+      unitTicketCents: 5000,
+    },
+  };
+  const res = createResponseDouble();
+
+  try {
+    await createPurchase(req, res);
+
+    assert.equal(res.statusCode, 201);
+    assert.equal(res.body.purchase.id, 101);
+    assert.equal(res.body.purchaseQueued, undefined);
+
+    const purchaseQueueCall = lPushCalls.find(
+      (call) => call.key === PURCHASE_QUEUE_KEY
+    );
+    assert.ok(purchaseQueueCall);
+
+    assert.deepEqual(JSON.parse(purchaseQueueCall.value), {
+      purchaseId: 101,
+      userId: "user-1",
+      eventId: "event-1",
+      quantity: 2,
+      idempotencyKey: "idem-queue-1",
+      createdAt: "2026-05-05T12:00:00.000Z",
+    });
+  } finally {
+    pool.query = originalQuery;
+    global.fetch = originalFetch;
+    redisClient.lPush = originalLPush;
+  }
+});
+
+test("createPurchase restores reserved seats without inflating capacity when payment is unreachable", async () => {
+  const originalQuery = pool.query;
+  const originalFetch = global.fetch;
+  const originalPublish = redisClient.publish;
+
+  const seatUpdates = [];
+  const insertedPurchase = {
+    id: 102,
+    user_id: "user-1",
+    event_id: "event-1",
+    quantity: 2,
+    unit_ticket_cents: 5000,
+    reservation_status: "reserved",
+    payment_status: "pending",
+    idempotency_key: "idem-rollback-1",
+    created_at: "2026-05-05T12:00:00.000Z",
+  };
+
+  pool.query = async (sql) => {
+    if (sql.includes("INSERT INTO purchases")) {
+      return { rows: [insertedPurchase] };
+    }
+
+    throw new Error(`Unexpected query: ${sql}`);
+  };
+
+  global.fetch = async (url, options = {}) => {
+    if (url === "http://event-catalog-service:3001/events/event-1" && !options.method) {
+      return {
+        ok: true,
+        async json() {
+          return {
+            event: {
+              id: "event-1",
+              seats_available: 10,
+            },
+          };
+        },
+      };
+    }
+
+    if (url === "http://event-catalog-service:3001/events/event-1" && options.method === "PUT") {
+      seatUpdates.push(JSON.parse(options.body).seats_available);
+      return {
+        ok: true,
+      };
+    }
+
+    if (url === "http://payment-service:3003/payments") {
+      throw new Error("payment service down");
+    }
+
+    throw new Error(`Unexpected fetch: ${url}`);
+  };
+
+  redisClient.publish = async () => 1;
+
+  const req = {
+    header(name) {
+      if (name === "Idempotency-Key") {
+        return "idem-rollback-1";
+      }
+      return undefined;
+    },
+    body: {
+      userId: "user-1",
+      eventId: "event-1",
+      quantity: 2,
+      unitTicketCents: 5000,
+    },
+  };
+  const res = createResponseDouble();
+
+  try {
+    await createPurchase(req, res);
+
+    assert.equal(res.statusCode, 502);
+    assert.deepEqual(seatUpdates, [8, 10]);
+    assert.deepEqual(res.body, {
+      error: "Payment Service unreachable",
+      purchase: insertedPurchase,
+    });
+  } finally {
+    pool.query = originalQuery;
+    global.fetch = originalFetch;
+    redisClient.publish = originalPublish;
   }
 });
 

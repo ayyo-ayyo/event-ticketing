@@ -186,7 +186,7 @@ curl -X POST http://localhost:3001/venues \
 docker compose up --build
 
 # Start with service replicas (Sprint 4)
-docker compose up --scale your-service=3
+docker compose up --build --scale event-catalog-service=3 --scale ticket-purchase-service=3 --scale payment-service=3
 
 # Verify all services are healthy
 docker compose ps

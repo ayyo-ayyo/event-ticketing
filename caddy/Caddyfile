@@ -1,0 +1,17 @@
+:80 {
+    handle /purchase.html {
+        reverse_proxy ticket-purchase-service:3002
+    }
+    handle /purchases* {
+        reverse_proxy ticket-purchase-service:3002
+    }
+    handle /ui/* {
+        reverse_proxy ticket-purchase-service:3002
+    }
+    handle /payments* {
+        reverse_proxy payment-service:3003
+    }
+    handle {
+        reverse_proxy event-catalog-service:3001
+    }
+}

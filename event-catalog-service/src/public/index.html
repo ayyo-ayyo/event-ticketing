@@ -120,7 +120,7 @@ async function eventsFunc(){
                         <td>${fmtDate(event.date)}</td>
                         <td>$${(event.basePriceCents / 100).toFixed(2)}</td>
                         <td>${event.seats_available}</td>
-                        <td><button type="button" onclick="window.location.href='http://127.0.0.1:3002/purchase.html?eventId=${event.id}'">Purchase</button></td>
+                        <td><button type="button" onclick="window.location.href='/purchase.html?eventId=${event.id}'">Purchase</button></td>
                     </tr>
                 `).join('')}
             </tbody>

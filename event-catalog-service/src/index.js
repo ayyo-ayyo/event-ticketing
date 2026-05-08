@@ -158,6 +158,7 @@ app.delete('/events/:id', async (req, res) => {
 
 app.get('/events/:id', async (req, res) => {
   const { id } = req.params;
+  const { admin } = req.query;
   const cacheKey = `event:${id}`;
 
   try {
@@ -184,12 +185,14 @@ app.get('/events/:id', async (req, res) => {
     };
 
     await redis.set(cacheKey, JSON.stringify(event), { EX: 60 });
-    //push to analytics queue so the Analytics Worker can update read metrics
-    const analyticsJob = JSON.stringify({
-      eventId: event.id,
-      read: 1,
-    });
-    await redis.lPush("analytics:queue", analyticsJob);
+    if (!admin) { //push to analytics queue so the Analytics Worker can update read metrics
+      const analyticsJob = JSON.stringify({
+        eventId: event.id,
+        time: new Date().toISOString(),
+        idempotencyKey: `read-${event.id}-${Date.now()}`, // Unique key for this read event
+      });
+      await redis.lPush("analytics:queue", analyticsJob);
+    }
     return res.status(200).json({ source: 'database', event });
   } catch (error) {
     return res.status(500).json({ error: 'failed_to_fetch_event', message: error.message });
@@ -346,7 +349,7 @@ async function start() {
 
     await redis.connect();
 
-    app.listen(PORT, '0.0.0.0',() => {
+    app.listen(PORT, () => {
       console.log(`event-catalog-service listening on port ${PORT}`);
     });
   } catch (error) {
